@@ -1,0 +1,2 @@
+Status: 200
+{"id":"gemini-285e560c-5320-45b1-b1fa-db856a07b0b1","object":"chat.completion","created":1766559100,"model":"gemini-2.5-pro","choices":[{"index":0,"message":{"role":"assistant","content":"```json\n{\n  \"summary\": \"\",\n  \"narrative_arc\": [],\n  \"learning_moments\": []\n}\n```","name":null,"tool_calls":null,"tool_call_id":null},"finish_reason":"stop","logprobs":null}],"usage":{"prompt_tokens":1777,"completion_tokens":32,"total_tokens":1809},"system_fingerprint":null,"orchestrator_trace":null}

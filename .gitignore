@@ -1,0 +1,16 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.DS_Store
+node_modules/
+dist/
+build/
+.vscode/
+.idea/
+*.sqlite
+*.db
+temp_*
+*_cache
+test_subs*
+debug_*.py

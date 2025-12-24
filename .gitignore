@@ -14,3 +14,8 @@ temp_*
 *_cache
 test_subs*
 debug_*.py
+prd.md
+prompt.md
+test_ai_simple.py
+test_api.py
+test_backend.py

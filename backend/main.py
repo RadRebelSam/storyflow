@@ -55,12 +55,11 @@ async def get_models():
     # Static list since fetching from all dynamic providers is complex without knowing the key first
     return {
         "data": [
-            {"id": "gpt-4o", "description": "OpenAI - Smart & Fast"},
-            {"id": "gemini-1.5-pro", "description": "Google - Long Context"},
-            {"id": "claude-3-5-sonnet-20240620", "description": "Anthropic - High Quality"},
-            {"id": "deepseek-chat", "description": "DeepSeek - Cost Effective"},
-            {"id": "gpt-5", "description": "AI Builders - Experimental"}, 
-            {"id": "gemini-2.5-pro", "description": "AI Builders - Experimental"}
+            {"id": "gemini-2.5-pro", "description": "gemini-2.5-pro (Google Gemini)"},
+            {"id": "gpt-5", "description": "gpt-5 (OpenAI Compatible)"},
+            {"id": "deepseek", "description": "deepseek (Fast & Cost Effective)"},
+            {"id": "supermind-agent-v1", "description": "supermind-agent-v1 (Multi-tool Agent)"},
+            {"id": "grok-4-fast", "description": "grok-4-fast (X.AI Grok)"},
         ]
     }
 

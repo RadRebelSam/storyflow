@@ -5,6 +5,7 @@ import os
 from typing import Optional, Dict, Any
 
 DB_PATH = "cache.db"
+PROMPT_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "prompt.md")
 
 class CacheService:
     def __init__(self, db_path: str = DB_PATH):
@@ -25,9 +26,18 @@ class CacheService:
         conn.commit()
         conn.close()
 
+    def _get_prompt_hash(self) -> str:
+        """Reads prompt.md and returns its hash."""
+        try:
+            with open(PROMPT_FILE_PATH, "r", encoding="utf-8") as f:
+                return hashlib.md5(f.read().encode()).hexdigest()
+        except Exception:
+            return "default_prompt"
+
     def _generate_key(self, input_data: str, model: str) -> str:
-        """Generates a unique hash for the input (URL or Text) and model."""
-        content = f"{input_data}::{model}"
+        """Generates a unique hash for the input (URL or Text), model, and PROMPT content."""
+        prompt_hash = self._get_prompt_hash()
+        content = f"{input_data}::{model}::{prompt_hash}"
         return hashlib.sha256(content.encode()).hexdigest()
 
     def get(self, input_data: str, model: str) -> Optional[Dict[str, Any]]:

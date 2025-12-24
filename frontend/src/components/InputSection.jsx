@@ -7,6 +7,7 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
   const [url, setUrl] = useState('');
   const [models, setModels] = useState([]);
   const [selectedModel, setSelectedModel] = useState('');
+  const [customModelId, setCustomModelId] = useState('');
   const [error, setError] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -17,25 +18,30 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
     'openai': [
       { id: 'gpt-4o', description: 'GPT-4o (Smartest)' },
       { id: 'gpt-4-turbo', description: 'GPT-4 Turbo' },
-      { id: 'gpt-3.5-turbo', description: 'GPT-3.5 Turbo (Fast)' }
+      { id: 'gpt-3.5-turbo', description: 'GPT-3.5 Turbo (Fast)' },
+      { id: 'custom', description: 'Type Custom Model ID...' }
     ],
     'anthropic': [
       { id: 'claude-3-5-sonnet-20240620', description: 'Claude 3.5 Sonnet' },
       { id: 'claude-3-opus-20240229', description: 'Claude 3 Opus' },
-      { id: 'claude-3-haiku-20240307', description: 'Claude 3 Haiku' }
+      { id: 'claude-3-haiku-20240307', description: 'Claude 3 Haiku' },
+      { id: 'custom', description: 'Type Custom Model ID...' }
     ],
     'gemini': [
       { id: 'gemini-1.5-pro', description: 'Gemini 1.5 Pro' },
-      { id: 'gemini-1.5-flash', description: 'Gemini 1.5 Flash' }
+      { id: 'gemini-1.5-flash', description: 'Gemini 1.5 Flash' },
+      { id: 'custom', description: 'Type Custom Model ID...' }
     ],
     'deepseek': [
       { id: 'deepseek-chat', description: 'DeepSeek Chat' },
-      { id: 'deepseek-coder', description: 'DeepSeek Coder' }
+      { id: 'deepseek-coder', description: 'DeepSeek Coder' },
+      { id: 'custom', description: 'Type Custom Model ID...' }
     ],
     'openrouter': [
       { id: 'openai/gpt-4o', description: 'GPT-4o (via OpenRouter)' },
       { id: 'anthropic/claude-3.5-sonnet', description: 'Claude 3.5 Sonnet (via OpenRouter)' },
-      { id: 'google/gemini-pro-1.5', description: 'Gemini 1.5 Pro (via OpenRouter)' }
+      { id: 'google/gemini-pro-1.5', description: 'Gemini 1.5 Pro (via OpenRouter)' },
+      { id: 'custom', description: 'Type Custom Model ID...' }
     ],
     'ai-builders': [] // Will be fetched from backend
   };
@@ -96,10 +102,16 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
       };
     }
 
+    const finalModel = selectedModel === 'custom' ? customModelId : selectedModel;
+    if (!finalModel) {
+      setError("Please select or enter a valid model.");
+      return;
+    }
+
     if (mode === 'url') {
-      onAnalyze({ url, model: selectedModel, provider_config: providerConfig, transcription_config: transcriptionConfig });
+      onAnalyze({ url, model: finalModel, provider_config: providerConfig, transcription_config: transcriptionConfig });
     } else {
-      onAnalyze({ transcript_text: manualText, model: selectedModel, provider_config: providerConfig, transcription_config: transcriptionConfig });
+      onAnalyze({ transcript_text: manualText, model: finalModel, provider_config: providerConfig, transcription_config: transcriptionConfig });
     }
   };
 
@@ -316,6 +328,24 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
                 </option>
               ))}
             </select>
+
+            {selectedModel === 'custom' && (
+              <input
+                type="text"
+                placeholder="Enter Model ID (e.g. gpt-4-turbo)"
+                value={customModelId}
+                onChange={(e) => setCustomModelId(e.target.value)}
+                style={{
+                  padding: '0 1rem',
+                  borderRadius: '12px',
+                  border: '1px solid var(--border-color)',
+                  backgroundColor: 'rgba(255,255,255,0.05)',
+                  color: 'white',
+                  height: '50px',
+                  width: '200px'
+                }}
+              />
+            )}
 
             <button
               type="submit"

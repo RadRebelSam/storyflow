@@ -98,7 +98,7 @@ The frontend will start at `http://localhost:5173`.
 
 ## 🎓 Acknowledgments
 
-This project was developed with the knowledge from **The AI Architect** curriculum at **[Superlinear Academy](https://www.superlinear.academy/c/aa/)**, founded by **[Yuzheng Sun](https://www.lizheng.ai/)**.
+This project was developed using the knowledge from **The AI Architect** curriculum at **[Superlinear Academy](https://www.superlinear.academy/c/aa/)**, founded by **[Yuzheng Sun](https://www.lizheng.ai/)**.
 
 ---
 

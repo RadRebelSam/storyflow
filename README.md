@@ -1,12 +1,110 @@
-# StoryFlow
+# 🎙️ StoryFlow
 
-**AI-Powered Storytelling Analysis Tool**
+> **Decode the DNA of Great Conversations.**
+> StoryFlow uses AI to dissect long-form podcasts and videos, revealing the hidden narrative architecture, interview techniques, and mental models used by world-class creators.
 
-StoryFlow dissects long-form podcasts and videos to reveal the hidden architecture of great conversations. It helps you learn storytelling techniques, interview frameworks, and narrative structures from the best creators.
+![License](https://img.shields.io/badge/license-MIT-blue) ![React](https://img.shields.io/badge/frontend-React%20%2B%20Vite-61DAFB) ![FastAPI](https://img.shields.io/badge/backend-FastAPI-009688) ![Python](https://img.shields.io/badge/python-3.10%2B-blue)
 
-## License
+## ✨ Features
 
-MIT License
+*   **🎬 Narrative Arc Visualization**: See the structure of a conversation at a glance (The Setup, The Conflict, The Release).
+*   **💡 "Learning Moments" Extraction**: Automatically identifies and extracts actionable frameworks, mental models, and key insights.
+*   **🗣️ Speaker Diarization**: Distinguishes between Host and Guest (via Deepgram) to analyze interviewing techniques vs. storytelling.
+*   **⚡ Dual-Mode Transcription**: 
+    *   **Free**: Robust YouTube Captions extraction (via `yt-dlp`).
+    *   **Pro**: High-fidelity audio transcription with Speaker Labels (via Deepgram).
+*   **🧠 Local Caching**: Never pay to analyze the same video twice. Results are cached locally via SQLite.
+*   **🔌 Multi-LLM Support**: Plug in your favorite AI—OpenAI, Anthropic, or Gemini.
+
+## 🛠️ Tech Stack
+
+*   **Frontend**: React, Vite, Vanilla CSS.
+*   **Backend**: Python, FastAPI, SQLite.
+*   **Intelligence**: `yt-dlp` (Media Extraction), `deepgram-sdk` (Diarization), OpenAI/Anthropic (Analysis).
+
+---
+
+## 🚀 Getting Started
+
+Follow these steps to run StoryFlow on your local machine.
+
+### Prerequisites
+
+1.  **Python 3.10+**
+2.  **Node.js 18+**
+3.  **FFmpeg** (Required for Audio Processing)
+    *   Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z).
+    *   Extract to `C:\ffmpeg` (Windows) or install via `brew install ffmpeg` (Mac).
+    *   **Windows**: Add `C:\ffmpeg\bin` to your System PATH (or the app will try to auto-detect it there).
+
+### 1. Backend Setup
+
+Open a terminal in the `backend` directory:
+
+```bash
+cd backend
+```
+
+**Install Dependencies:**
+```bash
+# Create virtual environment
+python -m venv venv
+
+# Activate (Windows)
+.\venv\Scripts\activate
+# Activate (Mac/Linux)
+source venv/bin/activate
+
+# Install packages
+pip install -r requirements.txt
+```
+
+**Run Server:**
+```bash
+uvicorn main:app --reload
+```
+The backend will start at `http://localhost:8000`.
+
+### 2. Frontend Setup
+
+Open a **new** terminal in the `frontend` directory:
+
+```bash
+cd frontend
+```
+
+**Install & Run:**
+```bash
+npm install
+npm run dev
+```
+The frontend will start at `http://localhost:5173`.
+
+---
+
+## 📖 Usage Guide
+
+1.  **Open the App**: Go to **http://localhost:5173**.
+2.  **Configure AI**:
+    *   Click the **Gear Icon** (Settings).
+    *   Select your Provider (e.g., OpenAI) and enter your API Key.
+    *   *(Optional)* Select **Deepgram** for "Speaker Diarization" and enter that API Key.
+3.  **Analyze Content**:
+    *   Paste a YouTube URL (e.g., a podcast interview).
+    *   Click **Analyze**.
+    *   Watch as StoryFlow generates the "Narrative Arc" and extracts insights in real-time.
+
+---
+
+## 🎓 Acknowledgments
+
+This project was developed with the knowledge from **The AI Architect** curriculum at **[Superlinear Academy](https://www.superlinear.academy/c/aa/)**, founded by **[Yuzheng Sun](https://www.lizheng.ai/)**.
+
+---
+
+## 📄 License
+
+**MIT License**
 
 Copyright (c) 2025 StoryFlow
 
@@ -27,86 +125,3 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-
----
-
-# How to Run StoryFlow Locally
-
-## Prerequisites
-1.  **Python 3.10+**
-2.  **Node.js 18+**
-3.  **FFmpeg** (Required for Diarization/Deepgram)
-    *   Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z).
-    *   Extract to `C:\ffmpeg`.
-    *   Add `C:\ffmpeg\bin` to your System PATH (or the app will try to auto-detect it there).
-
-## 1. Backend Setup (FastAPI)
-
-Open a terminal in the `backend` folder:
-
-```bash
-cd backend
-```
-
-### Install Dependencies
-```bash
-# Create venv (optional but recommended)
-python -m venv venv
-# Windows activate
-.\venv\Scripts\activate
-# Mac/Linux activate
-source venv/bin/activate
-
-# Install packages
-pip install -r requirements.txt
-```
-*Note: This includes `fastapi`, `uvicorn`, `youtube-transcript-api`, `yt-dlp`, `deepgram-sdk`, etc.*
-
-### Environment Variables (.env)
-Create a `.env` file in the `backend` folder (optional if using the GUI Settings):
-```env
-# Optional defaults
-SUPER_MIND_API_KEY=your_key_here
-BASE_URL=https://space.ai-builders.com/backend/v1
-```
-
-### Run Server
-```bash
-uvicorn main:app --reload
-```
-The backend will start at `http://localhost:8000`.
-
-## 2. Frontend Setup (React/Vite)
-
-Open a **new** terminal in the `frontend` folder:
-
-```bash
-cd frontend
-```
-
-### Install Dependencies
-```bash
-npm install
-```
-
-### Run Server
-```bash
-npm run dev
-```
-The frontend will start at `http://localhost:5173`.
-
-## 3. Usage & Configuration
-
-1.  Open **http://localhost:5173** in your browser.
-2.  **Configure AI**: Click the **Gear Icon** (Settings).
-    *   Select your Provider (e.g., OpenAI, Anthropic, or AI Builders).
-    *   Enter your API Key.
-3.  **Configure Audio (Diarization)**:
-    *   In Settings, select **Deepgram** as the Transcriber.
-    *   Enter your Deepgram API Key.
-    *   *Note: This enables "Host vs Guest" identification.*
-
-## Troubleshooting
-*   **FFmpeg Error**: Ensure FFmpeg is installed or placed in `C:\ffmpeg\bin`.
-*   **Site Can't Be Reached**: Make sure `npm run dev` is running in the frontend terminal.
-*   **Transcription Failed**: Check the backend terminal logs for detailed error messages.

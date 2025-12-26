@@ -9,3 +9,4 @@ deepgram-sdk
 pypdf
 python-multipart
 feedparser
+openai

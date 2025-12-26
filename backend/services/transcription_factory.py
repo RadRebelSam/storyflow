@@ -30,12 +30,32 @@ class TranscriptionProvider:
         if h > 0: return f"{int(h)}:{int(m):02d}:{int(s):02d}"
         return f"{int(m):02d}:{int(s):02d}"
 
+    def _ensure_ffmpeg(self):
+        """Checks for FFmpeg and adds to PATH if found in standard locations."""
+        if not shutil.which('ffmpeg'):
+            possible_paths = [
+                r"C:\ffmpeg\bin", 
+                r"C:\Program Files\ffmpeg\bin", # Common fallback
+            ]
+            for path in possible_paths:
+                if os.path.exists(path):
+                    print(f"Adding {path} to PATH for FFmpeg...")
+                    os.environ["PATH"] += os.pathsep + path
+                    break
+            
+            if not shutil.which('ffmpeg'):
+                raise Exception("FFmpeg not found in PATH or standard locations (C:\\ffmpeg\\bin). Please install FFmpeg.")
+
 class YouTubeCaptionsProvider(TranscriptionProvider):
     """
     Default free provider using community captions or auto-generated captions.
     Fast, free, but NO speaker labels (Diarization).
     """
     def fetch(self, url: str) -> Dict:
+        # Captions usually don't need ffmpeg unless burning/converting, 
+        # but yt-dlp might use it for merging. Safe to ensure.
+        self._ensure_ffmpeg() 
+        
         # Restrict to YouTube
         if not ("youtube.com" in url or "youtu.be" in url) and not ("mock" in url or "test_video" in url):
              raise ValueError("Free transcription (Captions) is restricted to YouTube. Please use Deepgram or Whisper for direct audio/video files.")
@@ -188,16 +208,7 @@ class DeepgramProvider(TranscriptionProvider):
 
     def fetch(self, url: str) -> Dict:
         # 0. Ensure FFmpeg is available
-        if not shutil.which('ffmpeg'):
-            # Fallback for Windows: Try standard install path
-            possible_path = r"C:\ffmpeg\bin"
-            if os.path.exists(possible_path):
-                print(f"Adding {possible_path} to PATH for FFmpeg...")
-                os.environ["PATH"] += os.pathsep + possible_path
-            
-            # Re-check
-            if not shutil.which('ffmpeg'):
-                raise Exception("FFmpeg is not installed or not found in PATH. Please install it to C:\\ffmpeg\\bin or add it to your system PATH.")
+        self._ensure_ffmpeg()
             
         video_id = self._get_video_id(url)
         print(f"Deepgram: extracting audio for {video_id}...")
@@ -370,6 +381,7 @@ class BaseWhisperProvider(TranscriptionProvider):
             return 0.0
 
     def fetch(self, url: str) -> Dict:
+        self._ensure_ffmpeg()
         video_id = self._get_video_id(url)
         print(f"{self.__class__.__name__}: extracting audio for {video_id}...")
         
@@ -439,6 +451,7 @@ class BaseWhisperProvider(TranscriptionProvider):
                 transcript = None
                 for attempt in range(2):
                     try:
+                        print(f"DEBUG: Attempting transcription with client base_url: {client.base_url}")
                         with open(chunk_file, "rb") as audio_file:
                             transcript = client.audio.transcriptions.create(
                                 model=self._get_model_name(), 
@@ -448,7 +461,10 @@ class BaseWhisperProvider(TranscriptionProvider):
                         break
                     except Exception as e:
                         print(f"Error transcribing chunk {i+1} (Attempt {attempt+1}): {e}")
-                        if attempt == 1: raise e
+                        print(f"DEBUG: Full error details: {str(e)}")
+                        if "403" in str(e) or "authorized" in str(e).lower():
+                            raise Exception("Provider Access Denied (403). This API key (likely Grok/X.ai) does not support Audio Transcription. Please use Deepgram or OpenAI.")
+                        raise e
                 
                 if hasattr(transcript, 'segments'):
                     for s in transcript.segments:
@@ -494,19 +510,198 @@ class BaseWhisperProvider(TranscriptionProvider):
             raise e
 
 
+
 class OpenAIWhisperProvider(BaseWhisperProvider):
     def _get_client(self):
         from openai import OpenAI
         return OpenAI(api_key=self.api_key)
 
-class GrokWhisperProvider(BaseWhisperProvider):
+class UniscribeProvider(TranscriptionProvider):
+    """
+    Uniscribe Provider (https://www.uniscribe.co/docs)
+    Supports direct YouTube URLs and file uploads.
+    """
+    BASE_URL = "https://api.uniscribe.co/api/v1"
+
     def __init__(self, api_key: str):
-        super().__init__(api_key, base_url="https://api.x.ai/v1")
+        self.api_key = api_key
+        self.headers = {"X-API-Key": self.api_key}
 
-    def _get_client(self):
-        from openai import OpenAI
-        return OpenAI(api_key=self.api_key, base_url=self.base_url)
+    def fetch(self, url: str) -> Dict:
+        video_id = self._get_video_id(url)
+        
+        # Check if it's a YouTube URL
+        if "youtube.com" in url or "youtu.be" in url:
+            print(f"Uniscribe: Using YouTube endpoint for {video_id}...")
+            return self._transcribe_youtube(url, video_id)
+        
+        # Fallback to file download & upload
+        print(f"Uniscribe: Downloading generic URL for {video_id}...")
+        self._ensure_ffmpeg()
+        return self._transcribe_file(url, video_id)
 
+    def _transcribe_youtube(self, url: str, video_id: str) -> Dict:
+        import requests
+        import time
+        
+        # 1. Start Job
+        try:
+            resp = requests.post(
+                f"{self.BASE_URL}/transcriptions/youtube",
+                headers=self.headers,
+                json={
+                    "url": url,
+                    "language_code": "en",
+                    "transcription_type": "transcript",
+                    "enable_speaker_diarization": True 
+                }
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            if not data.get("success"):
+                raise Exception(f"Uniscribe API Error: {data.get('message')}")
+            
+            task_id = data["data"]["id"]
+            print(f"Uniscribe Task Started: {task_id}")
+            
+            return self._poll_and_parse(task_id, video_id)
+            
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 401 or e.response.status_code == 403:
+                 raise Exception("Uniscribe Invalid API Key or Unauthorized.")
+            raise e
+
+    def _transcribe_file(self, url: str, video_id: str) -> Dict:
+        import requests
+        import time
+        import uuid
+        
+        # 1. Download File locally first
+        temp_uuid = str(uuid.uuid4())
+        audio_path = f"temp_uniscribe_{temp_uuid}.mp3"
+        
+        try:
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '128',
+                }],
+                'outtmpl': audio_path.replace('.mp3', ''), 
+                'quiet': True
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info.get('title', f"Video {video_id}")
+                duration = info.get('duration', 0)
+            
+            if not os.path.exists(audio_path):
+                 raise Exception("Audio download failed.")
+            
+            file_size = os.path.getsize(audio_path)
+            filename = os.path.basename(audio_path)
+            
+            # 2. Get Upload URL
+            print("Getting Uniscribe upload URL...")
+            resp = requests.post(
+                f"{self.BASE_URL}/files/upload-url",
+                headers=self.headers,
+                json={
+                    "filename": filename,
+                    "file_size": file_size
+                }
+            )
+            resp.raise_for_status()
+            upload_data = resp.json()["data"]
+            upload_url = upload_data["upload_url"]
+            file_key = upload_data["file_key"]
+            
+            # 3. Upload File
+            print("Uploading file to Uniscribe...")
+            with open(audio_path, 'rb') as f:
+                requests.put(upload_url, data=f).raise_for_status()
+            
+            # 4. Start Transcription
+            print("Starting transcription task...")
+            resp = requests.post(
+                f"{self.BASE_URL}/transcriptions",
+                headers=self.headers,
+                json={
+                    "file_key": file_key,
+                    "language_code": "en",
+                    "enable_speaker_diarization": True
+                }
+            )
+            resp.raise_for_status()
+            task_id = resp.json()["data"]["id"]
+            
+            # Cleanup local file early
+            os.remove(audio_path)
+            
+            return self._poll_and_parse(task_id, video_id, title, duration)
+
+        except Exception as e:
+            if os.path.exists(audio_path): os.remove(audio_path)
+            raise e
+
+    def _poll_and_parse(self, task_id: str, video_id: str, title=None, duration=None) -> Dict:
+        import requests
+        import time
+        
+        print(f"Polling Uniscribe Task {task_id}...")
+        while True:
+            resp = requests.get(f"{self.BASE_URL}/transcriptions/{task_id}", headers=self.headers)
+            if resp.status_code != 200:
+                print(f"Polling Error: {resp.status_code}")
+                time.sleep(5)
+                continue
+                
+            data = resp.json()["data"]
+            status = data["status"]
+            
+            if status == "completed":
+                print("Uniscribe Task Completed!")
+                # Parse Result
+                result_data = data["result"]
+                
+                # Use metadata from API if local not provided
+                final_title = title or data.get("filename", video_id)
+                final_duration = duration or data.get("duration", 0)
+                
+                parsed_segments = []
+                # Uniscribe segments: {start, end, text, speaker}
+                raw_segments = result_data.get("segments", [])
+                
+                for s in raw_segments:
+                    start = s.get("start", 0)
+                    speaker = s.get("speaker", "Speaker")
+                    # Clean speaker name? "A", "B" -> "Speaker A"
+                    if len(speaker) < 3 and speaker.isalnum(): 
+                        speaker = f"Speaker {speaker}"
+                        
+                    parsed_segments.append({
+                        "speaker": speaker,
+                        "time": self._format_timestamp(start),
+                        "start_seconds": start,
+                        "text": s.get("text", "").strip()
+                    })
+                
+                return {
+                    "video_id": video_id,
+                    "title": final_title,
+                    "duration": final_duration,
+                    "segments": parsed_segments
+                }
+                
+            elif status == "failed":
+                error_msg = data.get("error_message", "Unknown error")
+                raise Exception(f"Uniscribe Transcription Failed: {error_msg}")
+            
+            else:
+                # queued, preprocessing, processing
+                time.sleep(3)
 
 def get_transcription_provider(provider_type: str, api_key: str = None) -> TranscriptionProvider:
     if provider_type == 'deepgram':
@@ -517,9 +712,9 @@ def get_transcription_provider(provider_type: str, api_key: str = None) -> Trans
         if not api_key:
              raise ValueError("OpenAI API Key required for Whisper")
         return OpenAIWhisperProvider(api_key)
-    elif provider_type == 'grok_whisper':
+    elif provider_type == 'uniscribe':
         if not api_key:
-             raise ValueError("Grok API Key required")
-        return GrokWhisperProvider(api_key)
+             raise ValueError("Uniscribe API Key required")
+        return UniscribeProvider(api_key)
         
     return YouTubeCaptionsProvider()

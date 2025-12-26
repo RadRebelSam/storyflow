@@ -20,12 +20,15 @@ function App() {
 
     try {
       const res = await axios.get(`http://localhost:8000/history/${key}`);
-      setData({ meta: res.data.meta, analysis: res.data.result || res.data });
-      // Note: Backend might return flat object or wrapped in result. 
-      // Cache stores "result" which might contain "key" and "data".
-      // Let's check backend: cache_service.get_analysis_by_key returns json.loads(row[0])
-      // And analyze stores: result object.
-      // So res.data is likely the full result.
+      // Fix: The cache stores the FULL result { meta, transcript, analysis: {...} }
+      // So we must extract .analysis for the dashboard to work correctly.
+      const fullResult = res.data;
+
+      setData({
+        meta: fullResult.meta,
+        transcript: fullResult.transcript,
+        analysis: fullResult.analysis || fullResult.result || fullResult
+      });
       setLoading(false);
     } catch (err) {
       console.error(err);

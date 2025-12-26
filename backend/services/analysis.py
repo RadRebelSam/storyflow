@@ -6,7 +6,7 @@ import asyncio
 from typing import List, Dict, Any
 
 # Load the PROMPT from prompt.md
-PROMPT_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "prompt.md")
+PROMPT_FILE_PATH = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "prompt.md")
 
 def load_prompt():
     """Reads the prompt.md file."""
@@ -106,9 +106,12 @@ async def call_ai_api(messages: List[Dict], model_id: str, provider_config: Dict
             clean_json = clean_json_string(content)
             return json.loads(clean_json)
             
-        except json.JSONDecodeError:
-            print("Failed to parse AI response as JSON")
-            return {"error": "JSON Parse Error", "raw": content}
+        except json.JSONDecodeError as e:
+            print(f"Failed to parse AI response as JSON: {e}")
+            # Log bad response for debugging
+            with open("debug_llm_failure.txt", "w", encoding="utf-8") as f:
+                f.write(content)
+            return {"error": "JSON Parse Error. Check debug_llm_failure.txt for raw output.", "raw": content}
         except Exception as e:
             print(f"AI Request Failed: {e}")
             return {"error": str(e)}
@@ -120,73 +123,100 @@ async def analyze_transcript(transcript_data: Dict, model_id: str, job_id: str =
     """
     Orchestrates the Map-Reduce analysis with Progress Tracking.
     """
-    provider_config = provider_config or {}
-    
-    segments = transcript_data.get('segments', [])
-    if not segments:
-        if job_id: job_manager.fail_job(job_id, "No segments found")
-        return {"error": "No segments found"}
-
-    system_prompt_base = load_prompt()
-    
-    # --- Step 1: Macro Analysis (The Arc) ---
-    if job_id: job_manager.update_progress(job_id, 10, "Analyzing Narrative Arc (Macro Pass)...")
-    print("Starting Macro Analysis...")
-    full_text = "\n".join([f"[{s['time']}] {s.get('speaker', 'Speaker')}: {s['text']}" for s in segments])
-    
-    macro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on generating the 'summary' and 'narrative_arc'. return empty list for 'learning_moments'. You MUST output valid JSON."
-    
-    macro_messages = [
-        {"role": "system", "content": macro_system_prompt},
-        {"role": "user", "content": f"Analyze the following full transcript to find the Narrative Arc:\n\n{full_text}"}
-    ]
-    
-    # Run Macro Analysis
-    macro_result = await call_ai_api(macro_messages, model_id, provider_config)
-    
-    if "error" in macro_result:
-        # If job_id exists, fail it
-        if job_id:
-             job_manager.fail_job(job_id, f"Macro analysis failed: {macro_result['error']}")
-        return macro_result
-
-    # --- Step 2: Micro Analysis (The Moments) ---
-    if job_id: job_manager.update_progress(job_id, 30, "Chunking Transcript...")
-    print("Starting Micro Analysis (Chunking)...")
-    chunks = chunk_transcript(segments)
-    all_learning_moments = []
-    
-    micro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on finding specific 'learning_moments' in this segment. Return empty values for summary and arc. You MUST output valid JSON."
-    
-    total_chunks = len(chunks)
-    for i, chunk in enumerate(chunks):
-        current_chunk_num = i + 1
-        pct = 30 + int((current_chunk_num / total_chunks) * 60) # 30% to 90%
-        if job_id: job_manager.update_progress(job_id, pct, f"Analyzing Chunk {current_chunk_num}/{total_chunks}...")
+    try:
+        provider_config = provider_config or {}
         
-        print(f"Analyzing Chunk {current_chunk_num}/{total_chunks}...")
+        segments = transcript_data.get('segments', [])
+        if not segments:
+            if job_id: job_manager.fail_job(job_id, "No segments found")
+            return {"error": "No segments found"}
+
+        system_prompt_base = load_prompt()
         
-        micro_messages = [
-            {"role": "system", "content": micro_system_prompt},
-            {"role": "user", "content": f"Analyze this segment ({chunk['start']}s to {chunk['end']}s) for learning moments:\n\n{chunk['text']}"}
+        # --- Step 1: Macro Analysis (The Arc) ---
+        if job_id: job_manager.update_progress(job_id, 10, "Analyzing Narrative Arc (Macro Pass)...")
+        print("Starting Macro Analysis...")
+        full_text = "\n".join([f"[{s['time']}] {s.get('speaker', 'Speaker')}: {s['text']}" for s in segments])
+        
+        macro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on generating the 'summary' and 'narrative_arc'. return empty list for 'learning_moments'. You MUST output valid JSON ONLY. No Introduction. No Conclusion. If the transcript is short or incomplete, analyze what you have. DO NOT REFUSE. DO NOT ASK FOR MORE CONTEXT."
+        
+        macro_messages = [
+            {"role": "system", "content": macro_system_prompt},
+            {"role": "user", "content": f"Analyze the following full transcript to find the Narrative Arc:\n\n{full_text}"}
         ]
         
-        micro_result = await call_ai_api(micro_messages, model_id, provider_config)
+        # Run Macro Analysis
+        macro_result = await call_ai_api(macro_messages, model_id, provider_config)
         
-        moments = micro_result.get('learning_moments', [])
-        if moments:
-            all_learning_moments.extend(moments)
+        if "error" in macro_result:
+            # If job_id exists, fail it
+            if job_id:
+                 job_manager.fail_job(job_id, f"Macro analysis failed: {macro_result['error']}")
+            return macro_result
 
-    # --- Step 3: Merge & Deduplicate ---
-    if job_id: job_manager.update_progress(job_id, 95, "Finalizing Results...")
-    final_result = {
-        "summary": macro_result.get("summary", "Analysis failed to generate summary."),
-        "narrative_arc": macro_result.get("narrative_arc", []),
-        "learning_moments": deduplicate_moments(all_learning_moments)
+        # --- Step 2: Micro Analysis (The Moments) ---
+        if job_id: job_manager.update_progress(job_id, 30, "Chunking Transcript...")
+        print("Starting Micro Analysis (Chunking)...")
+        chunks = chunk_transcript(segments)
+        all_learning_moments = []
+        
+        micro_system_prompt = system_prompt_base + """
+
+TASK: Find specific 'learning_moments' in this segment.
+REQUIRED JSON STRUCTURE:
+{
+  "learning_moments": [
+    {
+      "timestamp_start": "MM:SS",
+      "timestamp_end": "MM:SS",
+      "category": "Host Technique" or "Guest Storytelling",
+      "technique_name": "Name of technique",
+      "quote": "Direct quote",
+      "analysis": "Why it worked",
+      "takeaway": "Actionable advice"
     }
-    
-    if job_id: job_manager.complete_job(job_id, final_result)
-    return final_result
+  ]
+}
+You MUST output valid JSON ONLY. No Introduction. No Conclusion. DO NOT REFUSE.
+"""
+        
+        total_chunks = len(chunks)
+        print(f"Total chunks to analyze: {total_chunks}")
+        
+        for i, chunk in enumerate(chunks):
+            current_chunk_num = i + 1
+            pct = 30 + int((current_chunk_num / total_chunks) * 60) # 30% to 90%
+            if job_id: job_manager.update_progress(job_id, pct, f"Analyzing Chunk {current_chunk_num}/{total_chunks}...")
+            
+            print(f"Analyzing Chunk {current_chunk_num}/{total_chunks}...")
+            
+            micro_messages = [
+                {"role": "system", "content": micro_system_prompt},
+                {"role": "user", "content": f"Analyze this segment ({chunk['start']}s to {chunk['end']}s) for learning moments:\n\n{chunk['text']}"}
+            ]
+            
+            micro_result = await call_ai_api(micro_messages, model_id, provider_config)
+            
+            moments = micro_result.get('learning_moments', [])
+            if isinstance(moments, list):
+                all_learning_moments.extend(moments)
+
+        # --- Step 3: Merge & Deduplicate ---
+        if job_id: job_manager.update_progress(job_id, 95, "Finalizing Results...")
+        final_result = {
+            "summary": macro_result.get("summary", "Analysis failed to generate summary."),
+            "narrative_arc": macro_result.get("narrative_arc", []),
+            "learning_moments": deduplicate_moments(all_learning_moments)
+        }
+        
+        if job_id: job_manager.complete_job(job_id, final_result)
+        return final_result
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        if job_id: job_manager.fail_job(job_id, f"Internal Analysis Error: {str(e)}")
+        return {"error": str(e)}
 
 def deduplicate_moments(moments: List[Dict]) -> List[Dict]:
     """
@@ -197,8 +227,14 @@ def deduplicate_moments(moments: List[Dict]) -> List[Dict]:
     return moments
 
 def clean_json_string(s):
-    """Removes markdown code blocks if present."""
+    """
+    Robustly extracts JSON object from a string.
+    1. Tries to find markdown code blocks (```json ... ```).
+    2. Fallback: Finds the first open brace '{' and the last closing brace '}'.
+    """
     if not isinstance(s, str): return ""
+    
+    # 1. Try Markdown Code Blocks
     pattern = r"```json\s*(.*?)\s*```"
     match = re.search(pattern, s, re.DOTALL)
     if match: return match.group(1)
@@ -206,5 +242,13 @@ def clean_json_string(s):
     pattern_generic = r"```\s*(.*?)\s*```"
     match_generic = re.search(pattern_generic, s, re.DOTALL)
     if match_generic: return match_generic.group(1)
+        
+    # 2. Fallback: Find outermost {}
+    # This handles cases where models chat before/after the JSON without code blocks
+    start = s.find('{')
+    end = s.rfind('}')
+    
+    if start != -1 and end != -1 and end > start:
+        return s[start:end+1]
         
     return s

@@ -15,8 +15,8 @@ def fetch_transcript(url: str, provider_config: dict = None):
         api_key = provider_config.get('deepgram_key')
     elif provider_type == 'openai_whisper':
         api_key = provider_config.get('openai_api_key')
-    elif provider_type == 'grok_whisper':
-        api_key = provider_config.get('grok_api_key')
+    elif provider_type == 'uniscribe':
+        api_key = provider_config.get('uniscribe_key')
     
     provider = get_transcription_provider(provider_type, api_key)
     return provider.fetch(url)

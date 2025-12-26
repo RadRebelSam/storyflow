@@ -11,7 +11,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
     const [transcriptionProvider, setTranscriptionProvider] = useState('youtube');
     const [deepgramKey, setDeepgramKey] = useState('');
     const [whisperKey, setWhisperKey] = useState('');
-    const [grokKey, setGrokKey] = useState('');
+    const [uniscribeKey, setUniscribeKey] = useState('');
 
     // Reuse OpenAI key for Whisper if same provider? 
     // Simplify: "OpenAI Whisper" option uses the main OpenAI key if available, or we could add a field.
@@ -37,7 +37,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
                 setTranscriptionProvider(parsed.transcriptionProvider || 'youtube');
                 setDeepgramKey(parsed.deepgramKey || '');
                 setWhisperKey(parsed.whisperKey || '');
-                setGrokKey(parsed.grokKey || '');
+                setUniscribeKey(parsed.uniscribeKey || '');
             }
         }
     }, [isOpen]);
@@ -61,7 +61,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
             transcriptionProvider,
             deepgramKey,
             whisperKey,
-            grokKey
+            uniscribeKey
         };
 
         localStorage.setItem('llm_settings', JSON.stringify(settings));
@@ -167,7 +167,7 @@ const SettingsModal = ({ isOpen, onClose }) => {
                             <option value="youtube">YouTube Captions (Free, No Host/Guest separation)</option>
                             <option value="deepgram">Deepgram (Paid, Identifies Speakers)</option>
                             <option value="openai_whisper">OpenAI Whisper (Paid)</option>
-                            <option value="grok_whisper">Grok Whisper (Paid, Beta)</option>
+                            <option value="uniscribe">Uniscribe (Paid, Beta)</option>
                         </select>
                     </div>
 
@@ -212,16 +212,16 @@ const SettingsModal = ({ isOpen, onClose }) => {
                         </div>
                     )}
 
-                    {transcriptionProvider === 'grok_whisper' && (
+                    {transcriptionProvider === 'uniscribe' && (
                         <div>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
-                                <Key size={16} /> Grok API Key
+                                <Key size={16} /> Uniscribe API Key
                             </label>
                             <input
                                 type="password"
-                                placeholder="Token..."
-                                value={grokKey}
-                                onChange={(e) => setGrokKey(e.target.value)}
+                                placeholder="Key..."
+                                value={uniscribeKey}
+                                onChange={(e) => setUniscribeKey(e.target.value)}
                                 style={{
                                     width: '100%', padding: '0.75rem', borderRadius: '8px',
                                     background: '#18181b', border: '1px solid #27272a',

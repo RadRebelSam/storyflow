@@ -103,7 +103,7 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
         transcription_provider: parsed.transcriptionProvider,
         deepgram_key: parsed.deepgramKey,
         openai_api_key: parsed.whisperKey || (parsed.provider === 'openai' ? parsed.apiKey : null),
-        grok_api_key: parsed.grokKey
+        uniscribe_key: parsed.uniscribeKey
       };
     }
 
@@ -241,24 +241,29 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
 
           {inputType === 'url' ? (
-            <div style={{ display: 'flex', gap: '1rem' }}>
-              <input
-                type="text"
-                placeholder="Paste YouTube link or audio URL (e.g., .mp3)..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                style={{
-                  flex: 1,
-                  padding: '1rem 1.5rem',
-                  borderRadius: '12px',
-                  border: '1px solid var(--border-color)',
-                  backgroundColor: 'rgba(255,255,255,0.05)',
-                  color: 'white',
-                  fontSize: '1rem',
-                  outline: 'none'
-                }}
-              />
-            </div>
+            <>
+              <div style={{ display: 'flex', gap: '1rem' }}>
+                <input
+                  type="text"
+                  placeholder="Paste YouTube link or audio URL (e.g., .mp3)..."
+                  value={url}
+                  onChange={(e) => setUrl(e.target.value)}
+                  style={{
+                    flex: 1,
+                    padding: '1rem 1.5rem',
+                    borderRadius: '12px',
+                    border: '1px solid var(--border-color)',
+                    backgroundColor: 'rgba(255,255,255,0.05)',
+                    color: 'white',
+                    fontSize: '1rem',
+                    outline: 'none'
+                  }}
+                />
+              </div>
+              <p style={{ marginTop: '0.5rem', fontSize: '0.85rem', color: '#a1a1aa', textAlign: 'left', paddingLeft: '0.5rem' }}>
+                *Supports YouTube links or direct audio files ending in .mp3, .m4a, .wav
+              </p>
+            </>
           ) : (
             <div style={{ position: 'relative' }}>
               <textarea

@@ -95,7 +95,6 @@ The frontend will start at `http://localhost:5173`.
 2.  **Configure AI**:
     *   Click the **Gear Icon** (Settings).
     *   Select your Provider (e.g., OpenAI) and enter your API Key.
-    *   Select your Provider (e.g., OpenAI) and enter your API Key.
     *   **Transcription**: Choose between YouTube (Free), Deepgram, OpenAI Whisper, or Grok Whisper.
     *   Enter the corresponding API Key for proper functionality.
 3.  **Analyze Content**:

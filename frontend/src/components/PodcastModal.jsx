@@ -78,17 +78,15 @@ const PodcastModal = ({ isOpen, onClose, onSelect }) => {
                             background: '#27272a', border: '1px solid #3f3f46', color: 'white'
                         }}
                     />
-                    <button
-                        onClick={handleFetch}
-                        disabled={loading}
-                        style={{
-                            padding: '0.75rem 1.5rem', borderRadius: '8px',
-                            background: '#8b5cf6', border: 'none',
-                            color: 'white', fontWeight: 'bold', cursor: loading ? 'wait' : 'pointer'
-                        }}
-                    >
-                        {loading ? 'Fetching...' : 'Fetch'}
-                    </button>
+                </ div>
+                <p style={{ marginTop: '-1rem', marginBottom: '1.5rem', fontSize: '0.8rem', color: '#a1a1aa' }}>
+                    *Supported formats: RSS Feeds usually ending in .xml
+                </p>
+                <div style={{ display: 'none' }}>
+                    {/* Hidden button to keep layout reference if needed for other styles, 
+                           but actually we want the button next to input. 
+                           Let's restructure the input container.
+                       */}
                 </div>
 
                 {/* Error */}

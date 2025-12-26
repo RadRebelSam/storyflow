@@ -12,7 +12,10 @@
 *   **🗣️ Speaker Diarization**: Distinguishes between Host and Guest (via Deepgram) to analyze interviewing techniques vs. storytelling.
 *   **⚡ Dual-Mode Transcription**: 
     *   **Free**: Robust YouTube Captions extraction (via `yt-dlp`).
-    *   **Pro**: High-fidelity audio transcription with Speaker Labels (via Deepgram).
+    *   **Pro (Deepgram)**: High-fidelity audio transcription with Speaker Labels (Diarization).
+    *   **Pro (Whisper)**: Support for **OpenAI Whisper** and **Grok Whisper** (beta) for high accuracy. 
+    *   **Unlimited Length**: Smart chunking handles large files (>25MB) automatically.
+*   **🎙️ Podcast Browser**: Browse episodes directly from any RSS feed URL and analyze them instanly.
 *   **🧠 Local Caching**: Never pay to analyze the same video twice. Results are cached locally via SQLite.
 *   **🔌 Multi-LLM Support**: Plug in your favorite AI—OpenAI, Anthropic, or Gemini.
 
@@ -20,7 +23,7 @@
 
 *   **Frontend**: React, Vite, Vanilla CSS.
 *   **Backend**: Python, FastAPI, SQLite.
-*   **Intelligence**: `yt-dlp` (Media Extraction), `deepgram-sdk` (Diarization), OpenAI/Anthropic (Analysis).
+*   **Intelligence**: `yt-dlp` (Media Extraction), `deepgram-sdk` (Diarization), OpenAI/Anthropic/Grok (Analysis & Transcription).
 
 ---
 
@@ -33,9 +36,12 @@ Follow these steps to run StoryFlow on your local machine.
 1.  **Python 3.10+**
 2.  **Node.js 18+**
 3.  **FFmpeg** (Required for Audio Processing)
-    *   Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z).
-    *   Extract to `C:\ffmpeg` (Windows) or install via `brew install ffmpeg` (Mac).
-    *   **Windows**: Add `C:\ffmpeg\bin` to your System PATH (or the app will try to auto-detect it there).
+    *   **Manual Install Required** (if `winget` fails):
+        *   Download from [gyan.dev](https://www.gyan.dev/ffmpeg/builds/ffmpeg-git-full.7z).
+        *   Extract to `C:\ffmpeg`.
+        *   **Crucial**: Add `C:\ffmpeg\bin` to your System PATH manually.
+        *   Verify by running `ffmpeg -version` in a NEW terminal.
+    *   *Note: FFmpeg is required for Deepgram, Whisper (chunking), and generic Audio URL support.*
 
 ### 1. Backend Setup
 
@@ -56,6 +62,7 @@ python -m venv venv
 source venv/bin/activate
 
 # Install packages
+# Install minimal packages (optimized list)
 pip install -r requirements.txt
 ```
 
@@ -88,9 +95,12 @@ The frontend will start at `http://localhost:5173`.
 2.  **Configure AI**:
     *   Click the **Gear Icon** (Settings).
     *   Select your Provider (e.g., OpenAI) and enter your API Key.
-    *   *(Optional)* Select **Deepgram** for "Speaker Diarization" and enter that API Key.
+    *   Select your Provider (e.g., OpenAI) and enter your API Key.
+    *   **Transcription**: Choose between YouTube (Free), Deepgram, OpenAI Whisper, or Grok Whisper.
+    *   Enter the corresponding API Key for proper functionality.
 3.  **Analyze Content**:
     *   Paste a YouTube URL (e.g., a podcast interview).
+    *   **OR** Click **Podcast Browser** to find an episode from an RSS feed.
     *   Click **Analyze**.
     *   Watch as StoryFlow generates the "Narrative Arc" and extracts insights in real-time.
 

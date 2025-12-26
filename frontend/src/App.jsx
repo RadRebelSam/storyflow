@@ -3,11 +3,37 @@ import axios from 'axios';
 import InputSection from './components/InputSection';
 import AnalysisDashboard from './components/AnalysisDashboard';
 
+import HistorySidebar from './components/HistorySidebar';
+
 function App() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
   const [progress, setProgress] = useState({ percent: 0, message: 'Starting...' });
+  const [refreshHistory, setRefreshHistory] = useState(0); // Trigger to reload history
+
+  const handleHistorySelect = async (key) => {
+    setLoading(true);
+    setError('');
+    setData(null);
+    setProgress({ percent: 100, message: "Loading from cache..." });
+
+    try {
+      const res = await axios.get(`http://localhost:8000/history/${key}`);
+      setData({ meta: res.data.meta, analysis: res.data.result || res.data });
+      // Note: Backend might return flat object or wrapped in result. 
+      // Cache stores "result" which might contain "key" and "data".
+      // Let's check backend: cache_service.get_analysis_by_key returns json.loads(row[0])
+      // And analyze stores: result object.
+      // So res.data is likely the full result.
+      setLoading(false);
+    } catch (err) {
+      console.error(err);
+      setError("Failed to load history item.");
+      setLoading(false);
+    }
+  };
+
 
   const handleAnalyze = async (payload) => {
     setLoading(true);
@@ -31,7 +57,9 @@ function App() {
 
           if (job.status === 'completed') {
             setLoading(false);
+            setLoading(false);
             setData({ ...initialData, analysis: job.result });
+            setRefreshHistory(prev => prev + 1); // Refresh history list
           } else if (job.status === 'failed') {
             setLoading(false);
             setError(job.error || "Analysis Failed");
@@ -59,31 +87,36 @@ function App() {
   };
 
   return (
-    <div className="App">
-      <InputSection onAnalyze={handleAnalyze} loading={loading} progress={progress} />
+    <div className="layout app-layout">
+      <HistorySidebar onSelect={handleHistorySelect} refreshTrigger={refreshHistory} />
+      <div className="main-content">
+        <div className="App">
+          <InputSection onAnalyze={handleAnalyze} loading={loading} progress={progress} />
 
-      {error && (
-        <div className="container" style={{ marginTop: '2rem', textAlign: 'center' }}>
-          <div style={{
-            background: 'rgba(239, 68, 68, 0.1)',
-            border: '1px solid #ef4444',
-            color: '#ef4444',
-            padding: '1rem',
-            borderRadius: '8px',
-            display: 'inline-block'
-          }}>
-            {error}
-          </div>
+          {error && (
+            <div className="container" style={{ marginTop: '2rem', textAlign: 'center' }}>
+              <div style={{
+                background: 'rgba(239, 68, 68, 0.1)',
+                border: '1px solid #ef4444',
+                color: '#ef4444',
+                padding: '1rem',
+                borderRadius: '8px',
+                display: 'inline-block'
+              }}>
+                {error}
+              </div>
+            </div>
+          )}
+
+          {data && <AnalysisDashboard data={data} />}
+
+          {!data && !loading && !error && (
+            <div style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)' }}>
+              <p>Paste a link above to discover storytelling secrets.</p>
+            </div>
+          )}
         </div>
-      )}
-
-      {data && <AnalysisDashboard data={data} />}
-
-      {!data && !loading && !error && (
-        <div style={{ textAlign: 'center', marginTop: '4rem', color: 'var(--text-secondary)' }}>
-          <p>Paste a link above to discover storytelling secrets.</p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

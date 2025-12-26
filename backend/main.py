@@ -6,9 +6,11 @@ import os
 import requests
 from dotenv import load_dotenv
 
+
 # Import services
 from services.transcription import fetch_transcript
 from services.analysis import analyze_transcript
+from services.rss import parse_podcast_feed
 
 load_dotenv()
 
@@ -70,7 +72,16 @@ async def parse_file_endpoint(file: UploadFile = File(...)):
     """
     from services.file_processing import parse_uploaded_file
     text = await parse_uploaded_file(file)
+    text = await parse_uploaded_file(file)
     return {"text": text}
+
+class RssFeedRequest(BaseModel):
+    url: str
+
+@app.post("/tools/rss-feed")
+def get_rss_feed(request: RssFeedRequest):
+    """Parses podcast RSS feed."""
+    return parse_podcast_feed(request.url)
 
 from fastapi import BackgroundTasks
 from services.jobs import job_manager
@@ -98,6 +109,28 @@ async def run_analysis_task(job_id: str, transcript_data: dict, model_id: str, p
     except Exception as e:
         print(f"Background Job Failed: {e}")
         job_manager.fail_job(job_id, str(e))
+
+@app.get("/history")
+def get_history():
+    """Returns list of past analyses."""
+    return {"history": cache_service.get_history_list()}
+
+@app.get("/history/{key}")
+def get_history_item(key: str):
+    """Returns full analysis for a specific history item."""
+    data = cache_service.get_analysis_by_key(key)
+    if not data:
+        raise HTTPException(status_code=404, detail="History item not found")
+    return data
+
+class DeleteHistoryRequest(BaseModel):
+    keys: list[str]
+
+@app.post("/history/delete")
+def delete_history(request: DeleteHistoryRequest):
+    """Deletes selected history items."""
+    cache_service.delete_keys(request.keys)
+    return {"message": "Deleted successfully", "count": len(request.keys)}
 
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest, background_tasks: BackgroundTasks):

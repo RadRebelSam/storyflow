@@ -11,11 +11,18 @@ class TranscriptionProvider:
         raise NotImplementedError("Subclasses must implement fetch")
 
     def _get_video_id(self, url: str) -> str:
+        # 1. Try YouTube patterns
         patterns = [r'(?:v=|\/)([0-9A-Za-z_-]{11}).*', r'(?:youtu\.be\/)([0-9A-Za-z_-]{11})']
         for p in patterns:
             match = re.search(p, url)
             if match: return match.group(1)
-        raise ValueError("Invalid YouTube URL")
+        
+        # 2. Generic URL Support (return hash)
+        if url.startswith("http"):
+            import hashlib
+            return f"url_{hashlib.md5(url.encode()).hexdigest()[:8]}"
+
+        raise ValueError("Invalid URL")
 
     def _format_timestamp(self, seconds):
         m, s = divmod(seconds, 60)
@@ -29,6 +36,10 @@ class YouTubeCaptionsProvider(TranscriptionProvider):
     Fast, free, but NO speaker labels (Diarization).
     """
     def fetch(self, url: str) -> Dict:
+        # Restrict to YouTube
+        if not ("youtube.com" in url or "youtu.be" in url) and not ("mock" in url or "test_video" in url):
+             raise ValueError("Free transcription (Captions) is restricted to YouTube. Please use Deepgram or Whisper for direct audio/video files.")
+
         video_id = self._get_video_id(url)
         
         # Mock Logic preserved
@@ -211,9 +222,14 @@ class DeepgramProvider(TranscriptionProvider):
             }
             
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-                title = info.get('title', f"Video {video_id}")
-                duration = info.get('duration', 0)
+                try:
+                    info = ydl.extract_info(url, download=True)
+                    title = info.get('title', f"Video {video_id}")
+                    duration = info.get('duration', 0)
+                except Exception as dl_err:
+                    # Fallback: if yt-dlp fails on generic URL but it IS a file, maybe wget/requests?
+                    # For now, rely on yt-dlp specific error
+                    raise Exception(f"Download Validation Failed: {str(dl_err)}")
                 
             # Check file existence (yt-dlp might produce temp_id.mp3)
             if not os.path.exists(final_audio_path):
@@ -226,46 +242,67 @@ class DeepgramProvider(TranscriptionProvider):
             deepgram = DeepgramClient(api_key=self.api_key)
             
             with open(final_audio_path, "rb") as audio:
-                payload = {"buffer": audio}
-                # Use simple dict for options
-                options = {
-                    "model": "nova-2",
-                    "smart_format": "true", # Pass as string if dict? SDK usually handles it. 
-                    "diarize": "true",
-                    "punctuate": "true"
-                }
-                # v3.x syntax found via introspection: deepgram.listen.v1.media.transcribe_file
-                response = deepgram.listen.v1.media.transcribe_file(payload, options)
+                # Deepgram v3: transcribe_file takes keyword arguments only
+                response = deepgram.listen.v1.media.transcribe_file(
+                    request=audio, # File object acts as iterator
+                    model="nova-2",
+                    smart_format=True,
+                    diarize=True,
+                    punctuate=True
+                )
                 
             # 3. Parse Response
-            segments = []
-            words = response['results']['channels'][0]['alternatives'][0]['words']
+            # Deepgram SDK v3 returns objects, not dicts. Use attribute access.
             
-            # Group words into sentences/segments by speaker
-            current_speaker = None
-            current_text = []
-            segment_start = 0.0
-            
-            # Simple grouping heuristic
-            # Real Deepgram response has 'paragraphs' too, but let's stick to word stream or use their paragraphs if available
-            # Let's try to use 'paragraphs' for better chunking if available, otherwise word grouping
-            
-            data_paragraphs = response['results']['channels'][0]['alternatives'][0].get('paragraphs', {}).get('paragraphs', [])
-            
-            if data_paragraphs:
-                for p in data_paragraphs:
-                    speaker = f"Speaker {p['speaker']}"
-                    text = " ".join([s['text'] for s in p['sentences']])
-                    start = p['start']
-                    segments.append({
-                        "speaker": speaker,
-                        "time": self._format_timestamp(start),
-                        "start_seconds": start,
-                        "text": text
-                    })
-            else:
-                # Fallback to word-by-word (less clean)
-                segments.append({"speaker": "Unknown", "time": "00:00", "start_seconds": 0, "text": "Raw words (diarization paragraphing unavailable)."})
+            try:
+                # Accessing via attributes
+                # structure: response.results.channels[0].alternatives[0]
+                res = response.results
+                channel = res.channels[0]
+                alt = channel.alternatives[0]
+                words = alt.words
+                
+                # Group words into sentences/segments by speaker
+                segments = []
+                
+                # Try to use paragraphs if available
+                # Note: 'paragraphs' might be inside alt.paragraphs.paragraphs or just alt.paragraphs
+                # SDK structure usually mirrors JSON: alt.paragraphs.paragraphs
+                
+                data_paragraphs = []
+                if hasattr(alt, 'paragraphs') and alt.paragraphs:
+                    if hasattr(alt.paragraphs, 'paragraphs'):
+                         data_paragraphs = alt.paragraphs.paragraphs
+                    else:
+                         data_paragraphs = alt.paragraphs # Fallback
+                
+                if data_paragraphs:
+                    for p in data_paragraphs:
+                        # p is likely an object too
+                        speaker = f"Speaker {p.speaker}"
+                        
+                        # sentences in p
+                        p_sentences = p.sentences
+                        text_parts = [s.text for s in p_sentences]
+                        text = " ".join(text_parts)
+                        
+                        start = p.start
+                        segments.append({
+                            "speaker": speaker,
+                            "time": self._format_timestamp(start),
+                            "start_seconds": start,
+                            "text": text
+                        })
+                else:
+                    # Fallback to word-by-word
+                    # words is a list of objects too
+                    segments.append({"speaker": "Unknown", "time": "00:00", "start_seconds": 0, "text": "Raw words (diarization paragraphing unavailable)."})
+
+            except Exception as parse_err:
+                 print(f"Deepgram Response Parsing Failed: {parse_err}")
+                 # Fallback debug print
+                 print(f"Response dir: {dir(response)}")
+                 raise parse_err
 
             # Cleanup
             try:
@@ -296,9 +333,193 @@ class DeepgramProvider(TranscriptionProvider):
 
 
 
+
+import subprocess
+import glob
+
+class BaseWhisperProvider(TranscriptionProvider):
+    """
+    Base class for Whisper-based providers (OpenAI, Grok, etc.)
+    Handles download, size check, chunking (if needed), and transcription loop.
+    """
+    CHUNK_SIZE_LIMIT_MB = 24
+    SEGMENT_TIME_SEC = 900
+
+    def __init__(self, api_key: str, base_url: str = None):
+        self.api_key = api_key
+        self.base_url = base_url
+
+    def _get_client(self):
+        raise NotImplementedError
+
+    def _get_model_name(self):
+        return "whisper-1"
+
+    def _get_audio_duration(self, file_path: str) -> float:
+        try:
+            cmd = [
+                "ffprobe", 
+                "-v", "error", 
+                "-show_entries", "format=duration", 
+                "-of", "default=noprint_wrappers=1:nokey=1", 
+                file_path
+            ]
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            return float(result.stdout.strip())
+        except:
+            return 0.0
+
+    def fetch(self, url: str) -> Dict:
+        video_id = self._get_video_id(url)
+        print(f"{self.__class__.__name__}: extracting audio for {video_id}...")
+        
+        import uuid
+        temp_uuid = str(uuid.uuid4())
+        audio_path_base = f"temp_whisper_{temp_uuid}"
+        final_audio_path = f"{audio_path_base}.mp3"
+        chunk_pattern = f"{audio_path_base}_chunk_*.mp3"
+        
+        try:
+            # 1. Download Audio
+            ydl_opts = {
+                'format': 'bestaudio/best',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '64', 
+                }],
+                'outtmpl': audio_path_base,
+                'quiet': True,
+                'no_warnings': True
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                title = info.get('title', f"Video {video_id}")
+                duration = info.get('duration', 0)
+
+            if not os.path.exists(final_audio_path):
+                 raise Exception("Audio download failed.")
+
+            # 2. Check Size
+            file_size_mb = os.path.getsize(final_audio_path) / (1024 * 1024)
+            chunks = [final_audio_path]
+            is_chunked = False
+            
+            if file_size_mb > self.CHUNK_SIZE_LIMIT_MB: # Safety margin for 25MB limit
+                print(f"File size {file_size_mb:.2f}MB > {self.CHUNK_SIZE_LIMIT_MB}MB. Chunking...")
+                is_chunked = True
+                # Chunk using ffmpeg
+                split_cmd = [
+                    "ffmpeg", "-i", final_audio_path,
+                    "-f", "segment",
+                    "-segment_time", str(self.SEGMENT_TIME_SEC),
+                    "-c", "copy",
+                    f"{audio_path_base}_chunk_%03d.mp3"
+                ]
+                subprocess.run(split_cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=True)
+                
+                # Get chunks
+                chunks = sorted(glob.glob(chunk_pattern))
+                print(f"Split into {len(chunks)} chunks.")
+
+            # 3. Transcribe Loop
+            client = self._get_client()
+            all_segments = []
+            time_offset = 0.0
+            
+            for i, chunk_file in enumerate(chunks):
+                print(f"Transcribing segment {i+1}/{len(chunks)}...")
+                
+                # Get duration BEFORE processing (for offset calculation of next chunk)
+                # Getting precise duration of chunk is important if using -c copy
+                chunk_duration = self._get_audio_duration(chunk_file) if is_chunked else duration
+                
+                # Retry logic for API
+                transcript = None
+                for attempt in range(2):
+                    try:
+                        with open(chunk_file, "rb") as audio_file:
+                            transcript = client.audio.transcriptions.create(
+                                model=self._get_model_name(), 
+                                file=audio_file, 
+                                response_format="verbose_json"
+                            )
+                        break
+                    except Exception as e:
+                        print(f"Error transcribing chunk {i+1} (Attempt {attempt+1}): {e}")
+                        if attempt == 1: raise e
+                
+                if hasattr(transcript, 'segments'):
+                    for s in transcript.segments:
+                        start = s.start + time_offset
+                        text = s.text.strip()
+                        all_segments.append({
+                            "speaker": "Speaker",
+                            "time": self._format_timestamp(start),
+                            "start_seconds": start,
+                            "text": text
+                        })
+                else:
+                     # Fallback
+                     all_segments.append({
+                         "speaker": "Speaker",
+                         "time": self._format_timestamp(time_offset),
+                         "start_seconds": time_offset,
+                         "text": transcript.text
+                     })
+                
+                time_offset += chunk_duration
+
+            # Cleanup
+            try:
+                if os.path.exists(final_audio_path): os.remove(final_audio_path)
+                for f in glob.glob(chunk_pattern): os.remove(f)
+            except: pass
+
+            return {
+                "video_id": video_id,
+                "title": title,
+                "duration": duration,
+                "segments": all_segments
+            }
+            
+        except Exception as e:
+            try:
+                if 'final_audio_path' in locals() and os.path.exists(final_audio_path):
+                     os.remove(final_audio_path)
+                if 'chunk_pattern' in locals():
+                    for f in glob.glob(chunk_pattern): os.remove(f)
+            except: pass
+            raise e
+
+
+class OpenAIWhisperProvider(BaseWhisperProvider):
+    def _get_client(self):
+        from openai import OpenAI
+        return OpenAI(api_key=self.api_key)
+
+class GrokWhisperProvider(BaseWhisperProvider):
+    def __init__(self, api_key: str):
+        super().__init__(api_key, base_url="https://api.x.ai/v1")
+
+    def _get_client(self):
+        from openai import OpenAI
+        return OpenAI(api_key=self.api_key, base_url=self.base_url)
+
+
 def get_transcription_provider(provider_type: str, api_key: str = None) -> TranscriptionProvider:
     if provider_type == 'deepgram':
         if not api_key:
              raise ValueError("Deepgram API Key required")
         return DeepgramProvider(api_key)
+    elif provider_type == 'openai_whisper':
+        if not api_key:
+             raise ValueError("OpenAI API Key required for Whisper")
+        return OpenAIWhisperProvider(api_key)
+    elif provider_type == 'grok_whisper':
+        if not api_key:
+             raise ValueError("Grok API Key required")
+        return GrokWhisperProvider(api_key)
+        
     return YouTubeCaptionsProvider()

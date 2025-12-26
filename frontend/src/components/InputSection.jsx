@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
-import { Sparkles, ArrowRight, Settings } from 'lucide-react';
+import { Play, Upload, MessageSquare, Mic, AlertCircle, FileText, Settings, Type, Sparkles } from 'lucide-react';
 import SettingsModal from './SettingsModal';
+import PodcastModal from './PodcastModal';
 
 const InputSection = ({ onAnalyze, loading, progress }) => {
   const [url, setUrl] = useState('');
@@ -10,8 +11,10 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
   const [customModelId, setCustomModelId] = useState('');
   const [error, setError] = useState('');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isPodcastOpen, setIsPodcastOpen] = useState(false);
 
-  const [provider, setProvider] = useState('ai-builders');
+  // Settings for LLM
+  const [llmProvider, setLlmProvider] = useState('ai-builders');
 
   // Hardcoded model options per provider
   const MODEL_OPTIONS = {
@@ -53,7 +56,7 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
       const parsed = JSON.parse(stored);
       currentProvider = parsed.provider || 'ai-builders';
     }
-    setProvider(currentProvider);
+    setLlmProvider(currentProvider);
 
     if (currentProvider === 'ai-builders') {
       // Fetch from backend as before
@@ -98,7 +101,9 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
       };
       transcriptionConfig = {
         transcription_provider: parsed.transcriptionProvider,
-        deepgram_key: parsed.deepgramKey
+        deepgram_key: parsed.deepgramKey,
+        openai_api_key: parsed.whisperKey || (parsed.provider === 'openai' ? parsed.apiKey : null),
+        grok_api_key: parsed.grokKey
       };
     }
 
@@ -108,14 +113,14 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
       return;
     }
 
-    if (mode === 'url') {
+    if (inputType === 'url') {
       onAnalyze({ url, model: finalModel, provider_config: providerConfig, transcription_config: transcriptionConfig });
     } else {
       onAnalyze({ transcript_text: manualText, model: finalModel, provider_config: providerConfig, transcription_config: transcriptionConfig });
     }
   };
 
-  const [mode, setMode] = useState('url'); // 'url' or 'text'
+  const [inputType, setInputType] = useState('url'); // 'url' or 'text'
   const [manualText, setManualText] = useState('');
   const [uploading, setUploading] = useState(false);
 
@@ -151,7 +156,19 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
       borderBottom: '1px solid var(--border-color)',
       background: 'radial-gradient(circle at center, rgba(139, 92, 246, 0.1) 0%, transparent 70%)'
     }}>
-      <SettingsModal isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+      <SettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+      />
+
+      <PodcastModal
+        isOpen={isPodcastOpen}
+        onClose={() => setIsPodcastOpen(false)}
+        onSelect={(url) => {
+          setInputType('url');
+          setUrl(url);
+        }}
+      />
 
       <div className="container" style={{ maxWidth: '800px', position: 'relative' }}>
 
@@ -197,31 +214,25 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
         <div style={{ display: 'flex', justifyContent: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
           <button
             type="button"
-            onClick={() => setMode('url')}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '20px',
-              border: '1px solid var(--accent-purple)',
-              background: mode === 'url' ? 'var(--accent-purple)' : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            className={inputType === 'url' ? 'btn-primary' : 'btn-secondary'}
+            onClick={() => setInputType('url')}
           >
-            YouTube Link
+            YouTube / Audio Link
           </button>
+
           <button
             type="button"
-            onClick={() => setMode('text')}
-            style={{
-              padding: '0.5rem 1rem',
-              borderRadius: '20px',
-              border: '1px solid var(--accent-purple)',
-              background: mode === 'text' ? 'var(--accent-purple)' : 'transparent',
-              color: 'white',
-              cursor: 'pointer',
-              transition: 'all 0.2s'
-            }}
+            className="btn-secondary"
+            onClick={() => setIsPodcastOpen(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+          >
+            <Mic size={16} /> Podcast Browser
+          </button>
+
+          <button
+            type="button"
+            className={inputType === 'text' ? 'btn-primary' : 'btn-secondary'}
+            onClick={() => setInputType('text')}
           >
             Start from Text
           </button>
@@ -233,7 +244,7 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
             <div style={{ display: 'flex', gap: '1rem' }}>
               <input
                 type="text"
-                placeholder="Paste YouTube Link here..."
+                placeholder="Paste YouTube link or audio URL (e.g., .mp3)..."
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 style={{
@@ -376,7 +387,7 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
                     left: 0,
                     top: 0,
                     bottom: 0,
-                    width: `${progress?.percent || 0}%`,
+                    width: `${progress?.percent || 0}% `,
                     background: 'rgba(255,255,255,0.2)',
                     zIndex: -1,
                     transition: 'width 0.5s ease'

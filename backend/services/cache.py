@@ -71,5 +71,66 @@ class CacheService:
         conn.close()
         print(f"Cache SAVED for {key[:8]}...")
 
+    def get_history_list(self) -> list:
+        """Retrieves listing of all cached analysis."""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("SELECT key, data, model, timestamp FROM analysis_cache ORDER BY timestamp DESC")
+        rows = c.fetchall()
+        
+        history = []
+        for row in rows:
+            key, data_str, model, timestamp = row
+            try:
+                data = json.loads(data_str)
+                # Safely extract meta info
+                meta = data.get("meta", {})
+                title = meta.get("title", f"Analysis from {timestamp}")
+                url = meta.get("url", "No URL")
+                
+                history.append({
+                    "key": key,
+                    "title": title,
+                    "url": url,
+                    "model": model,
+                    "timestamp": timestamp
+                })
+            except:
+                continue
+                
+        conn.close()
+        return history
+
+    def get_analysis_by_key(self, key: str) -> Optional[Dict[str, Any]]:
+        """Retrieves full analysis by cache key."""
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        c.execute("SELECT data FROM analysis_cache WHERE key = ?", (key,))
+        row = c.fetchone()
+        conn.close()
+        
+        if row:
+            try:
+                return json.loads(row[0])
+            except:
+                return None
+                return None
+        return None
+
+    def delete_keys(self, keys: list):
+        """Deletes specific keys from the cache."""
+        if not keys:
+            return
+        
+        conn = sqlite3.connect(self.db_path)
+        c = conn.cursor()
+        # Dynamically build query placeholder
+        placeholders = ','.join('?' for _ in keys)
+        sql = f"DELETE FROM analysis_cache WHERE key IN ({placeholders})"
+        c.execute(sql, tuple(keys))
+        conn.commit()
+        conn.close()
+        print(f"Deleted {len(keys)} items from cache.")
+
 # Singleton instance
 cache_service = CacheService()

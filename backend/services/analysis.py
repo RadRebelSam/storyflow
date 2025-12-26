@@ -134,7 +134,7 @@ async def analyze_transcript(transcript_data: Dict, model_id: str, job_id: str =
     print("Starting Macro Analysis...")
     full_text = "\n".join([f"[{s['time']}] {s.get('speaker', 'Speaker')}: {s['text']}" for s in segments])
     
-    macro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on generating the 'summary' and 'narrative_arc'. return empty list for 'learning_moments'."
+    macro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on generating the 'summary' and 'narrative_arc'. return empty list for 'learning_moments'. You MUST output valid JSON."
     
     macro_messages = [
         {"role": "system", "content": macro_system_prompt},
@@ -156,7 +156,7 @@ async def analyze_transcript(transcript_data: Dict, model_id: str, job_id: str =
     chunks = chunk_transcript(segments)
     all_learning_moments = []
     
-    micro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on finding specific 'learning_moments' in this segment. Return empty values for summary and arc."
+    micro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on finding specific 'learning_moments' in this segment. Return empty values for summary and arc. You MUST output valid JSON."
     
     total_chunks = len(chunks)
     for i, chunk in enumerate(chunks):

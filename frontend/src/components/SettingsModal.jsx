@@ -1,62 +1,70 @@
-import React, { useState, useEffect } from 'react';
-import { X, Save, Key, Globe, Server } from 'lucide-react';
 
-const PROVIDERS = [
-    { id: 'openai', name: 'OpenAI', defaultBaseUrl: 'https://api.openai.com/v1' },
-    { id: 'anthropic', name: 'Anthropic', defaultBaseUrl: 'https://api.anthropic.com/v1' },
-    { id: 'gemini', name: 'Gemini (Google)', defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta' },
-    { id: 'deepseek', name: 'DeepSeek', defaultBaseUrl: 'https://api.deepseek.com/v1' },
-    { id: 'openrouter', name: 'OpenRouter', defaultBaseUrl: 'https://openrouter.ai/api/v1' },
-    { id: 'ai-builders', name: 'AI Builders (Default)', defaultBaseUrl: 'https://space.ai-builders.com/backend/v1' }
-];
+import React, { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
 
 const SettingsModal = ({ isOpen, onClose }) => {
-    const [provider, setProvider] = useState('ai-builders');
+    const [provider, setProvider] = useState('openai');
     const [apiKey, setApiKey] = useState('');
     const [baseUrl, setBaseUrl] = useState('');
 
     // Transcription Settings
     const [transcriptionProvider, setTranscriptionProvider] = useState('youtube');
     const [deepgramKey, setDeepgramKey] = useState('');
+    const [whisperKey, setWhisperKey] = useState('');
+    const [grokKey, setGrokKey] = useState('');
 
-    // Load settings on open
+    // Reuse OpenAI key for Whisper if same provider? 
+    // Simplify: "OpenAI Whisper" option uses the main OpenAI key if available, or we could add a field.
+    // Let's rely on the main "API Key" field if provider is OpenAI, or maybe a dedicated field?
+    // User requested "add openai whisper as an option for transcriber".
+    // Let's try to keep it simple: if Transcriber is Whisper, use the main LLM key ?? 
+    // No, LLM provider might be Anthropic. So we need a separate key field potentially.
+    // Actually, let's keep it clean: 
+    // If Transcriber == OpenAI Whisper, show "OpenAI API Key" field specific to transcription?
+    // Or just rename "Deepgram API Key" to "Transcription API Key" and treat it generic?
+    // Let's do dedicated fields to avoid confusion.
+
+
+
     useEffect(() => {
         if (isOpen) {
-            const storedConfig = localStorage.getItem('llm_settings');
-            if (storedConfig) {
-                const config = JSON.parse(storedConfig);
-                setProvider(config.provider || 'ai-builders');
-                setApiKey(config.apiKey || '');
-                setBaseUrl(config.baseUrl || '');
-                // Load transcription settings
-                setTranscriptionProvider(config.transcriptionProvider || 'youtube');
-                setDeepgramKey(config.deepgramKey || '');
-            } else {
-                // Defaults
-                setProvider('ai-builders');
-                setBaseUrl('https://space.ai-builders.com/backend/v1');
-                setTranscriptionProvider('youtube');
+            const stored = localStorage.getItem('llm_settings');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                setProvider(parsed.provider || 'openai');
+                setApiKey(parsed.apiKey || '');
+                setBaseUrl(parsed.baseUrl || '');
+                setTranscriptionProvider(parsed.transcriptionProvider || 'youtube');
+                setDeepgramKey(parsed.deepgramKey || '');
+                setWhisperKey(parsed.whisperKey || '');
+                setGrokKey(parsed.grokKey || '');
             }
         }
     }, [isOpen]);
 
-    const handleProviderChange = (e) => {
-        const newProvider = e.target.value;
-        setProvider(newProvider);
-
-        // Auto-fill base URL if it's empty or matches another default
-        const providerData = PROVIDERS.find(p => p.id === newProvider);
-        if (providerData) {
-            setBaseUrl(providerData.defaultBaseUrl);
-        }
-    };
-
     const handleSave = () => {
-        const config = {
-            provider, apiKey, baseUrl,
-            transcriptionProvider, deepgramKey
+        // If using Whisper but no key provided, maybe fallback to main key if provider is OpenAI?
+        // Let's implement that logic in the backend or handleSubmit?
+        // Better to be explicit here.
+
+        // Construct config
+        // We'll save whisperKey but mostly likely use it as 'openai_api_key' for transcription config
+
+        // For the backend input section:
+        // It reads 'llm_settings'. 
+        // We need to store it there.
+
+        const settings = {
+            provider,
+            apiKey,
+            baseUrl,
+            transcriptionProvider,
+            deepgramKey,
+            whisperKey,
+            grokKey
         };
-        localStorage.setItem('llm_settings', JSON.stringify(config));
+
+        localStorage.setItem('llm_settings', JSON.stringify(settings));
         onClose();
     };
 
@@ -65,78 +73,136 @@ const SettingsModal = ({ isOpen, onClose }) => {
     return (
         <div style={{
             position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
-            background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(5px)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            zIndex: 1000
+            background: 'rgba(0,0,0,0.8)', zIndex: 1000,
+            display: 'flex', alignItems: 'center', justifyContent: 'center'
         }}>
             <div style={{
-                background: '#0f0f11', border: '1px solid #27272a',
-                borderRadius: '16px', width: '90%', maxWidth: '500px',
-                padding: '2rem', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)',
-                maxHeight: '90vh', overflowY: 'auto'
+                background: '#18181b',
+                padding: '2rem',
+                borderRadius: '12px',
+                width: '90%', maxWidth: '500px',
+                border: '1px solid #27272a',
+                position: 'relative'
             }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '2rem' }}>
-                    <h2 style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>Settings</h2>
-                    <button onClick={onClose} style={{ background: 'none', border: 'none', color: '#71717a', cursor: 'pointer' }}>
-                        <X size={24} />
-                    </button>
-                </div>
+                <button
+                    onClick={onClose}
+                    style={{
+                        position: 'absolute', top: '1rem', right: '1rem',
+                        background: 'none', border: 'none', color: '#a1a1aa', cursor: 'pointer'
+                    }}
+                >
+                    <X size={20} />
+                </button>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
+                <h2 style={{ marginTop: 0, marginBottom: '2rem' }}>⚙️ Settings</h2>
 
-                    {/* LLM Section */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <h3 style={{ fontSize: '1.1rem', color: '#e4e4e7', borderBottom: '1px solid #27272a', paddingBottom: '0.5rem' }}>
-                            🧠 AI Model Provider
-                        </h3>
+                {/* LLM Section */}
+                <div style={{ marginBottom: '2rem' }}>
+                    <h3 style={{ fontSize: '1rem', color: '#a1a1aa', marginBottom: '1rem' }}>Brain (LLM)</h3>
 
-                        {/* Provider Select */}
-                        <div>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
-                                <Server size={16} /> Provider
-                            </label>
-                            <select
-                                value={provider}
-                                onChange={handleProviderChange}
-                                style={{
-                                    width: '100%', padding: '0.75rem', borderRadius: '8px',
-                                    background: '#18181b', border: '1px solid #27272a',
-                                    color: 'white', outline: 'none'
-                                }}
-                            >
-                                {PROVIDERS.map(p => (
-                                    <option key={p.id} value={p.id}>{p.name}</option>
-                                ))}
-                            </select>
-                        </div>
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Provider</label>
+                        <select
+                            value={provider}
+                            onChange={(e) => setProvider(e.target.value)}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                background: '#27272a', border: '1px solid #3f3f46', color: 'white'
+                            }}
+                        >
+                            <option value="openai">OpenAI</option>
+                            <option value="anthropic">Anthropic</option>
+                            <option value="gemini">Google Gemini</option>
+                            <option value="deepseek">DeepSeek</option>
+                            <option value="openrouter">OpenRouter</option>
+                            <option value="ai-builders">AI Builders (Custom)</option>
+                        </select>
+                    </div>
 
-                        {/* API Key Input */}
-                        <div>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
-                                <Key size={16} /> API Key
-                            </label>
-                            <input
-                                type="password"
-                                placeholder="sk-..."
-                                value={apiKey}
-                                onChange={(e) => setApiKey(e.target.value)}
-                                style={{
-                                    width: '100%', padding: '0.75rem', borderRadius: '8px',
-                                    background: '#18181b', border: '1px solid #27272a',
-                                    color: 'white', outline: 'none'
-                                }}
-                            />
-                        </div>
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>API Key</label>
+                        <input
+                            type="password"
+                            value={apiKey}
+                            onChange={(e) => setApiKey(e.target.value)}
+                            placeholder="sk-..."
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                background: '#27272a', border: '1px solid #3f3f46', color: 'white'
+                            }}
+                        />
+                    </div>
 
-                        {/* Base URL Input */}
-                        <div>
-                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
-                                <Globe size={16} /> Base URL
-                            </label>
+                    {(provider === 'ai-builders' || provider === 'openrouter') && (
+                        <div style={{ marginBottom: '1rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Base URL (Optional)</label>
                             <input
                                 type="text"
                                 value={baseUrl}
                                 onChange={(e) => setBaseUrl(e.target.value)}
+                                placeholder="https://api.example.com/v1"
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                    background: '#27272a', border: '1px solid #3f3f46', color: 'white'
+                                }}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Transcription Section */}
+                <div style={{ marginBottom: '2rem', borderTop: '1px solid #27272a', paddingTop: '2rem' }}>
+                    <h3 style={{ fontSize: '1rem', color: '#a1a1aa', marginBottom: '1rem' }}>Ears (Transcription)</h3>
+
+                    <div style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Provider</label>
+                        <select
+                            value={transcriptionProvider}
+                            onChange={(e) => setTranscriptionProvider(e.target.value)}
+                            style={{
+                                width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                background: '#27272a', border: '1px solid #3f3f46', color: 'white'
+                            }}
+                        >
+                            <option value="youtube">YouTube Captions (Free, No Host/Guest separation)</option>
+                            <option value="deepgram">Deepgram (Paid, Identifies Speakers)</option>
+                            <option value="openai_whisper">OpenAI Whisper (Paid)</option>
+                            <option value="grok_whisper">Grok Whisper (Paid, Beta)</option>
+                        </select>
+                    </div>
+
+                    {transcriptionProvider === 'deepgram' && (
+                        <div>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
+                                <Key size={16} /> Deepgram API Key
+                            </label>
+                            <input
+                                type="password"
+                                placeholder="Token..."
+                                value={deepgramKey}
+                                onChange={(e) => setDeepgramKey(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                    background: '#18181b', border: '1px solid #27272a',
+                                    color: 'white', outline: 'none'
+                                }}
+                            />
+                            <p style={{ fontSize: '0.8rem', color: '#eab308', marginTop: '0.5rem' }}>
+                                ⚠️ Requires <b>ffmpeg</b> installed on your PC.
+                            </p>
+                        </div>
+                    )}
+
+                    {transcriptionProvider === 'openai_whisper' && (
+                        <div>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
+                                <Key size={16} /> OpenAI API Key (Whisper)
+                            </label>
+                            <input
+                                type="password"
+                                placeholder="sk-..."
+                                value={whisperKey}
+                                onChange={(e) => setWhisperKey(e.target.value)}
                                 style={{
                                     width: '100%', padding: '0.75rem', borderRadius: '8px',
                                     background: '#18181b', border: '1px solid #27272a',
@@ -144,78 +210,35 @@ const SettingsModal = ({ isOpen, onClose }) => {
                                 }}
                             />
                         </div>
-                    </div>
+                    )}
 
-                    {/* Transcription Section */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                        <h3 style={{ fontSize: '1.1rem', color: '#e4e4e7', borderBottom: '1px solid #27272a', paddingBottom: '0.5rem' }}>
-                            🎙️ Transcription & Diarization
-                        </h3>
+                    {transcriptionProvider === 'grok_whisper' && (
                         <div>
                             <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
-                                <Server size={16} /> Transcriber
+                                <Key size={16} /> Grok API Key
                             </label>
-                            <select
-                                value={transcriptionProvider}
-                                onChange={(e) => setTranscriptionProvider(e.target.value)}
+                            <input
+                                type="password"
+                                placeholder="Token..."
+                                value={grokKey}
+                                onChange={(e) => setGrokKey(e.target.value)}
                                 style={{
                                     width: '100%', padding: '0.75rem', borderRadius: '8px',
                                     background: '#18181b', border: '1px solid #27272a',
                                     color: 'white', outline: 'none'
                                 }}
-                            >
-                                <option value="youtube">YouTube Captions (Free, No Host/Guest separation)</option>
-                                <option value="deepgram">Deepgram (Paid, Identifies Speakers)</option>
-                            </select>
+                            />
                         </div>
-
-                        {transcriptionProvider === 'deepgram' && (
-                            <div>
-                                <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', color: '#a1a1aa' }}>
-                                    <Key size={16} /> Deepgram API Key
-                                </label>
-                                <input
-                                    type="password"
-                                    placeholder="Token..."
-                                    value={deepgramKey}
-                                    onChange={(e) => setDeepgramKey(e.target.value)}
-                                    style={{
-                                        width: '100%', padding: '0.75rem', borderRadius: '8px',
-                                        background: '#18181b', border: '1px solid #27272a',
-                                        color: 'white', outline: 'none'
-                                    }}
-                                />
-                                <p style={{ fontSize: '0.8rem', color: '#eab308', marginTop: '0.5rem' }}>
-                                    ⚠️ Requires <b>ffmpeg</b> installed on your PC.
-                                </p>
-                            </div>
-                        )}
-                    </div>
+                    )}
                 </div>
 
-                <div style={{ marginTop: '2rem', display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
-                    <button
-                        onClick={onClose}
-                        style={{
-                            padding: '0.75rem 1.5rem', borderRadius: '8px',
-                            background: 'transparent', border: '1px solid #27272a',
-                            color: 'white', cursor: 'pointer'
-                        }}
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        style={{
-                            padding: '0.75rem 1.5rem', borderRadius: '8px',
-                            background: '#8b5cf6', border: 'none',
-                            color: 'white', cursor: 'pointer', fontWeight: 'bold',
-                            display: 'flex', alignItems: 'center', gap: '0.5rem'
-                        }}
-                    >
-                        <Save size={18} /> Save Settings
-                    </button>
-                </div>
+                <button
+                    onClick={handleSave}
+                    className="btn-primary"
+                    style={{ width: '100%' }}
+                >
+                    Save Configuration
+                </button>
 
             </div>
         </div>

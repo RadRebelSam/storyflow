@@ -7,7 +7,16 @@ def fetch_transcript(url: str, provider_config: dict = None):
     """
     provider_config = provider_config or {}
     provider_type = provider_config.get('transcription_provider', 'youtube')
-    api_key = provider_config.get('deepgram_key')
+    provider_type = provider_config.get('transcription_provider', 'youtube')
+    
+    # Extract appropriate key
+    api_key = None
+    if provider_type == 'deepgram':
+        api_key = provider_config.get('deepgram_key')
+    elif provider_type == 'openai_whisper':
+        api_key = provider_config.get('openai_api_key')
+    elif provider_type == 'grok_whisper':
+        api_key = provider_config.get('grok_api_key')
     
     provider = get_transcription_provider(provider_type, api_key)
     return provider.fetch(url)

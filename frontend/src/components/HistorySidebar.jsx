@@ -46,9 +46,16 @@ function HistorySidebar({ onSelect, refreshTrigger }) {
     };
 
     // Delete Action
+    const [showConfirm, setShowConfirm] = useState(false);
+
     const handleDelete = async () => {
         if (selectedKeys.size === 0) return;
-        if (!confirm(`Are you sure you want to delete ${selectedKeys.size} items?`)) return;
+
+        if (!showConfirm) {
+            setShowConfirm(true);
+            setTimeout(() => setShowConfirm(false), 3000); // Reset after 3s
+            return;
+        }
 
         try {
             await axios.post("http://localhost:8000/history/delete", { keys: Array.from(selectedKeys) });
@@ -56,6 +63,7 @@ function HistorySidebar({ onSelect, refreshTrigger }) {
             fetchHistory();
             setIsSelectionMode(false);
             setSelectedKeys(new Set());
+            setShowConfirm(false);
         } catch (e) {
             alert("Failed to delete items.");
         }
@@ -84,8 +92,12 @@ function HistorySidebar({ onSelect, refreshTrigger }) {
                         {selectedKeys.size === history.length ? "Deselect All" : "Select All"}
                     </button>
                     {selectedKeys.size > 0 && (
-                        <button className="delete-btn" onClick={handleDelete}>
-                            Delete ({selectedKeys.size})
+                        <button
+                            className="delete-btn"
+                            onClick={handleDelete}
+                            style={{ background: showConfirm ? '#ef4444' : '' }}
+                        >
+                            {showConfirm ? "Confirm?" : `Delete (${selectedKeys.size})`}
                         </button>
                     )}
                 </div>

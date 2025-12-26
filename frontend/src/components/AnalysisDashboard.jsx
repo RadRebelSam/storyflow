@@ -9,6 +9,11 @@ const AnalysisDashboard = ({ data }) => {
 
     const { meta, analysis, transcript } = data;
 
+    // Safety check
+    if (!meta || !analysis) {
+        return <div className="container" style={{ padding: '2rem' }}>Error: Incomplete data.</div>;
+    }
+
     const onPlayerReady = (event) => {
         playerRef.current = event.target;
     };

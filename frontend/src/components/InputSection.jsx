@@ -240,7 +240,7 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
 
         <form onSubmit={handleSubmit} style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
 
-          {mode === 'url' ? (
+          {inputType === 'url' ? (
             <div style={{ display: 'flex', gap: '1rem' }}>
               <input
                 type="text"

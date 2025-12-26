@@ -84,7 +84,14 @@ class CacheService:
             try:
                 data = json.loads(data_str)
                 # Safely extract meta info
+                # Fallback if 'meta' key is missing (legacy cache data)
                 meta = data.get("meta", {})
+                if not meta and "narrative_arc" in data:
+                     # This is likely legacy data { summary, narrative_arc, learning_moments }
+                     # We can't recover the title easily unless we stored it elsewhere or re-fetch.
+                     # For now, show placeholder.
+                     pass
+
                 title = meta.get("title", f"Analysis from {timestamp}")
                 url = meta.get("url", "No URL")
                 

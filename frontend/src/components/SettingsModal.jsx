@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Key } from 'lucide-react';
 
 const SettingsModal = ({ isOpen, onClose }) => {
     const [provider, setProvider] = useState('openai');

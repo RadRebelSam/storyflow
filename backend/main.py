@@ -102,9 +102,21 @@ async def run_analysis_task(job_id: str, transcript_data: dict, model_id: str, p
         # Pass job_id to analyze_transcript so it can update progress
         result = await analyze_transcript(transcript_data, model_id, job_id=job_id, provider_config=provider_config)
         
+        # Merge everything into a single cacheable object
+        full_result = {
+            "meta": {
+                "video_id": transcript_data.get("video_id"),
+                "title": transcript_data.get("title"),
+                "duration": transcript_data.get("duration"),
+                "url": provider_config.get("url") or "Uploaded File" # Or derived from request
+            },
+            "transcript": transcript_data.get("segments"),
+            "analysis": result
+        }
+
         # Cache the result if successful
         if cache_key_input:
-            cache_service.set(cache_key_input, model_id, result)
+            cache_service.set(cache_key_input, model_id, full_result)
             
     except Exception as e:
         print(f"Background Job Failed: {e}")

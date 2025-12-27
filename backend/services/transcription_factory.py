@@ -247,20 +247,39 @@ class DeepgramProvider(TranscriptionProvider):
                  raise Exception("Audio download failed or file not found.")
 
             # 2. Call Deepgram
+            # 2. Call Deepgram
+            # 2. Call Deepgram
             print("Sending to Deepgram...")
             from deepgram import DeepgramClient
             
+            # Configure timeout via options if possible, or usually passed to methods
+            # Increasing timeout for large file uploads
             deepgram = DeepgramClient(api_key=self.api_key)
             
             with open(final_audio_path, "rb") as audio:
-                # Deepgram v3: transcribe_file takes keyword arguments only
+                # Prepare options dict
+                options = {
+                    "model": "nova-2", 
+                    "smart_format": True, 
+                    "diarize": True, 
+                    "punctuate": True
+                }
+                
+                # Fix Language Logic:
+                # If 'auto' or None -> detect_language=True
+                # If specific -> language=code
+                if language and language != 'auto':
+                    options["language"] = language
+                else:
+                    options["detect_language"] = True
+                    
+                print(f"Deepgram Options: {options}")
+
+                # Deepgram v3: transcribe_file request must be the file object itself (bytes/iterator)
+                # NOT a dict wrapper like {'buffer': audio}
                 response = deepgram.listen.v1.media.transcribe_file(
-                    request=audio, # File object acts as iterator
-                    model="nova-2",
-                    smart_format=True,
-                    diarize=True,
-                    punctuate=True,
-                    language=language if language and language != 'auto' else None
+                    request=audio,
+                    **options
                 )
                 
             # 3. Parse Response

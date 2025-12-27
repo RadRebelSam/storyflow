@@ -18,8 +18,10 @@ def fetch_transcript(url: str, provider_config: dict = None):
     elif provider_type == 'uniscribe':
         api_key = provider_config.get('uniscribe_key')
     
+    input_language = provider_config.get('input_language')
+    
     provider = get_transcription_provider(provider_type, api_key)
-    return provider.fetch(url)
+    return provider.fetch(url, language=input_language)
 
 def process_manual_transcript(text: str):
     """

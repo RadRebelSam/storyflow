@@ -58,10 +58,11 @@ async def get_models():
     return {
         "data": [
             {"id": "gemini-2.5-pro", "description": "gemini-2.5-pro (Google Gemini)"},
-            {"id": "gpt-5", "description": "gpt-5 (OpenAI Compatible)"},
+            {"id": "gpt-4o", "description": "gpt-4o (OpenAI - Most Capable)"},
+            {"id": "gpt-3.5-turbo", "description": "gpt-3.5-turbo (OpenAI - Fast & Cheap)"},
             {"id": "deepseek", "description": "deepseek (Fast & Cost Effective)"},
             {"id": "supermind-agent-v1", "description": "supermind-agent-v1 (Multi-tool Agent)"},
-            {"id": "grok-4-fast", "description": "grok-4-fast (X.AI Grok)"},
+            {"id": "grok-2-1212", "description": "Grok 2 (X.AI)"},
         ]
     }
 

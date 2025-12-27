@@ -13,6 +13,10 @@ const SettingsModal = ({ isOpen, onClose }) => {
     const [whisperKey, setWhisperKey] = useState('');
     const [uniscribeKey, setUniscribeKey] = useState('');
 
+    // Language Settings
+    const [inputLanguage, setInputLanguage] = useState('en');
+    const [outputLanguage, setOutputLanguage] = useState('Same as Audio');
+
     // Reuse OpenAI key for Whisper if same provider? 
     // Simplify: "OpenAI Whisper" option uses the main OpenAI key if available, or we could add a field.
     // Let's rely on the main "API Key" field if provider is OpenAI, or maybe a dedicated field?
@@ -38,6 +42,8 @@ const SettingsModal = ({ isOpen, onClose }) => {
                 setDeepgramKey(parsed.deepgramKey || '');
                 setWhisperKey(parsed.whisperKey || '');
                 setUniscribeKey(parsed.uniscribeKey || '');
+                setInputLanguage(parsed.inputLanguage || 'en');
+                setOutputLanguage(parsed.outputLanguage || 'Same as Audio');
             }
         }
     }, [isOpen]);
@@ -61,7 +67,9 @@ const SettingsModal = ({ isOpen, onClose }) => {
             transcriptionProvider,
             deepgramKey,
             whisperKey,
-            uniscribeKey
+            uniscribeKey,
+            inputLanguage,
+            outputLanguage
         };
 
         localStorage.setItem('llm_settings', JSON.stringify(settings));
@@ -230,6 +238,58 @@ const SettingsModal = ({ isOpen, onClose }) => {
                             />
                         </div>
                     )}
+                </div>
+
+                {/* Language Section */}
+                <div style={{ marginBottom: '2rem', borderTop: '1px solid #27272a', paddingTop: '2rem' }}>
+                    <h3 style={{ fontSize: '1rem', color: '#a1a1aa', marginBottom: '1rem' }}>🗣️ Language Preferences</h3>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Input Audio</label>
+                            <select
+                                value={inputLanguage}
+                                onChange={(e) => setInputLanguage(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                    background: '#27272a', border: '1px solid #3f3f46', color: 'white'
+                                }}
+                            >
+                                <option value="en">English</option>
+                                <option value="es">Spanish (Español)</option>
+                                <option value="fr">French (Français)</option>
+                                <option value="de">German (Deutsch)</option>
+                                <option value="it">Italian (Italiano)</option>
+                                <option value="pt">Portuguese (Português)</option>
+                                <option value="zh">Chinese (中文)</option>
+                                <option value="ja">Japanese (日本語)</option>
+                                <option value="ru">Russian (Русский)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem' }}>Output Analysis</label>
+                            <select
+                                value={outputLanguage}
+                                onChange={(e) => setOutputLanguage(e.target.value)}
+                                style={{
+                                    width: '100%', padding: '0.75rem', borderRadius: '8px',
+                                    background: '#27272a', border: '1px solid #3f3f46', color: 'white'
+                                }}
+                            >
+                                <option value="Same as Audio">Same as Audio</option>
+                                <option value="English">English</option>
+                                <option value="Spanish">Spanish</option>
+                                <option value="French">French</option>
+                                <option value="German">German</option>
+                                <option value="Italian">Italian</option>
+                                <option value="Portuguese">Portuguese</option>
+                                <option value="Chinese">Chinese</option>
+                                <option value="Japanese">Japanese</option>
+                                <option value="Russian">Russian</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
 
                 <button

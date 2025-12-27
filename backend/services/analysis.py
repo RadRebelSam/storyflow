@@ -95,10 +95,15 @@ async def call_ai_api(messages: List[Dict], model_id: str, provider_config: Dict
             result = provider.generate(messages, model=model_id)
             
             # Common parsing logic (OpenAI format is returned by all adapters)
-            content = result['choices'][0]['message']['content']
+            message = result['choices'][0]['message']
+            content = message.get('content') or ""
             
             # Check finish reason
             finish_reason = result['choices'][0].get('finish_reason')
+            
+            if not content and finish_reason == 'length':
+                 raise Exception("Context limit exceeded. The transcript was too long for this model.")
+                 
             if finish_reason == 'length':
                 print("WARNING: AI Output truncated due to token limit.")
             
@@ -106,11 +111,19 @@ async def call_ai_api(messages: List[Dict], model_id: str, provider_config: Dict
             clean_json = clean_json_string(content)
             return json.loads(clean_json)
             
-        except json.JSONDecodeError as e:
+        except (json.JSONDecodeError, Exception) as e:
             print(f"Failed to parse AI response as JSON: {e}")
             # Log bad response for debugging
-            with open("debug_llm_failure.txt", "w", encoding="utf-8") as f:
-                f.write(content)
+            try:
+                with open("debug_llm_failure.txt", "w", encoding="utf-8") as f:
+                    f.write(f"Error: {str(e)}\n")
+                    f.write(f"Finish Reason: {result['choices'][0].get('finish_reason')}\n")
+                    f.write(f"Content Length: {len(content)}\n")
+                    f.write("-" * 20 + " CONTENT " + "-" * 20 + "\n")
+                    f.write(content)
+                    f.write("\n" + "-" * 20 + " END CONTENT " + "-" * 20 + "\n")
+            except: pass
+            
             return {"error": "JSON Parse Error. Check debug_llm_failure.txt for raw output.", "raw": content}
         except Exception as e:
             print(f"AI Request Failed: {e}")
@@ -133,10 +146,35 @@ async def analyze_transcript(transcript_data: Dict, model_id: str, job_id: str =
 
         system_prompt_base = load_prompt()
         
-        # --- Step 1: Macro Analysis (The Arc) ---
+        # --- Handle Output Language ---
+        # Default Constraint (Match Audio)
+        constraint_text = """- **CRITICAL**: The output language for the *values* (summary, descriptions, quotes, analysis) MUST match the **majority language** spoken in the transcript.
+- **IMPORTANT**: The **JSON KEYS** (e.g., "narrative_arc", "learning_moments") MUST remain in **ENGLISH**. Do NOT translate the keys.
+- **Recall**: Use Single Quotes (') or Chinese Quotes (「」) for internal text. NEVER use double quotes (") inside the values.
+- If the audio is mixed (e.g., Spanglish), write in the dominant language."""
+
+        output_language = provider_config.get("output_language")
+        if output_language and output_language.lower() not in ["auto", "audio", "same as audio"]:
+            print(f"Applying Output Language Constraint: {output_language}")
+            constraint_text = f"""- **CRITICAL**: You MUST write the content (summary, analysis, takeaways) in **{output_language}**.
+- **IMPORTANT**: The **JSON KEYS** (e.g., "narrative_arc", "learning_moments") MUST remain in **ENGLISH**. Do NOT translate the keys.
+- **Recall**: Use Single Quotes (') or Chinese Quotes (「」) for internal text. NEVER use double quotes (") inside the values."""
+
+        # Apply to Prompt
+        if "{{LANGUAGE_CONSTRAINT}}" in system_prompt_base:
+            system_prompt_base = system_prompt_base.replace("{{LANGUAGE_CONSTRAINT}}", constraint_text)
+        else:
+            # Fallback: Append if placeholder is missing in prompt.md
+            system_prompt_base += f"\n\n# Language Constraint\n{constraint_text}"
         if job_id: job_manager.update_progress(job_id, 10, "Analyzing Narrative Arc (Macro Pass)...")
         print("Starting Macro Analysis...")
+        print("Starting Macro Analysis...")
         full_text = "\n".join([f"[{s['time']}] {s.get('speaker', 'Speaker')}: {s['text']}" for s in segments])
+        
+        # Truncate to valid context limit (approx 37k tokens)
+        if len(full_text) > 150000:
+            print(f"⚠️ Truncating transcript from {len(full_text)} chars to 150,000 chars for Macro Analysis.")
+            full_text = full_text[:150000] + "\n...(truncated)"
         
         macro_system_prompt = system_prompt_base + "\n\nTASK: Focus ONLY on generating the 'summary' and 'narrative_arc'. return empty list for 'learning_moments'. You MUST output valid JSON ONLY. No Introduction. No Conclusion. If the transcript is short or incomplete, analyze what you have. DO NOT REFUSE. DO NOT ASK FOR MORE CONTEXT."
         
@@ -155,9 +193,11 @@ async def analyze_transcript(transcript_data: Dict, model_id: str, job_id: str =
             return macro_result
 
         # --- Step 2: Micro Analysis (The Moments) ---
+        # --- Step 2: Micro Analysis (The Moments) ---
         if job_id: job_manager.update_progress(job_id, 30, "Chunking Transcript...")
         print("Starting Micro Analysis (Chunking)...")
-        chunks = chunk_transcript(segments)
+        # Reduce chunk size to 5 mins (300s) to prevent context overflow
+        chunks = chunk_transcript(segments, chunk_duration_sec=300, overlap_sec=60)
         all_learning_moments = []
         
         micro_system_prompt = system_prompt_base + """
@@ -190,12 +230,23 @@ You MUST output valid JSON ONLY. No Introduction. No Conclusion. DO NOT REFUSE.
             
             print(f"Analyzing Chunk {current_chunk_num}/{total_chunks}...")
             
+            chunk_text = chunk['text']
+            if len(chunk_text) > 30000:
+                print(f"⚠️ Truncating Chunk {current_chunk_num} from {len(chunk_text)} chars to 30,000.")
+                chunk_text = chunk_text[:30000] + "\n...(truncated)"
+
             micro_messages = [
                 {"role": "system", "content": micro_system_prompt},
-                {"role": "user", "content": f"Analyze this segment ({chunk['start']}s to {chunk['end']}s) for learning moments:\n\n{chunk['text']}"}
+                {"role": "user", "content": f"Analyze this segment ({chunk['start']}s to {chunk['end']}s) for learning moments:\n\n{chunk_text}"}
             ]
             
             micro_result = await call_ai_api(micro_messages, model_id, provider_config)
+
+            # Debug Log for Micro Analysis
+            try:
+                with open("debug_micro_response.txt", "a", encoding="utf-8") as f:
+                     f.write(f"\n--- Chunk {i+1} ---\n{json.dumps(micro_result, ensure_ascii=False, indent=2)}\n")
+            except: pass
             
             moments = micro_result.get('learning_moments', [])
             if isinstance(moments, list):

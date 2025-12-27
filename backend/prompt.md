@@ -57,4 +57,4 @@ Output strictly valid JSON.
 }
 
 # Language Constraint
-- All content in the output JSON must be in English.
+{{LANGUAGE_CONSTRAINT}}

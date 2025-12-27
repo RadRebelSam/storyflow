@@ -3,10 +3,11 @@ import json
 from typing import List, Dict, Any, Optional
 
 class LLMProvider:
-    def __init__(self, api_key: str, base_url: str):
+    def __init__(self, api_key: str, base_url: str, provider_type: str = "openai"):
         self.api_key = api_key
         # Ensure base_url doesn't have trailing slash for consistency
         self.base_url = base_url.rstrip('/') if base_url else ""
+        self.provider_type = provider_type.lower()
 
     def generate(self, messages: List[Dict], model: str, max_tokens: int = 4096, temperature: float = 0.3) -> Dict:
         raise NotImplementedError("Subclasses must implement generate")
@@ -31,9 +32,13 @@ class OpenAICompatibleProvider(LLMProvider):
             "model": model,
             "messages": messages,
             "temperature": temperature,
-            "max_tokens": max_tokens,
-            "response_format": {"type": "json_object"}
+            "max_tokens": max_tokens
         }
+        
+        # Only strict OpenAI supports 'json_object' reliably. 
+        # Others (DeepSeek, Custom Proxies) might error 400/500 if this is sent.
+        if self.provider_type == "openai":
+             payload["response_format"] = {"type": "json_object"}
 
         try:
             # Assume /chat/completions is needed if not present, but usually base_url convention varies.
@@ -42,9 +47,19 @@ class OpenAICompatibleProvider(LLMProvider):
             url = f"{self.base_url}/chat/completions"
             
             print(f"DEBUG: Sending to {url} with model {model}")
-            response = requests.post(url, json=payload, headers=headers, timeout=120)
+            # Increased timeout to 180s for long contexts
+            response = requests.post(url, json=payload, headers=headers, timeout=180)
             
             if response.status_code != 200:
+                # Log detailed error to file for debugging
+                try:
+                    import datetime
+                    with open("debug_api_errors.txt", "a", encoding="utf-8") as f:
+                        f.write(f"\n--- API Error {datetime.datetime.now()} ---\n")
+                        f.write(f"URL: {url}\nModel: {model}\nStatus: {response.status_code}\n")
+                        f.write(f"Response: {response.text}\n--------------------------\n")
+                except: pass
+
                 # Try to parse error
                 try:
                     err = response.json()
@@ -90,7 +105,7 @@ class AnthropicProvider(LLMProvider):
         url = f"{self.base_url}/messages"
         
         try:
-            response = requests.post(url, json=payload, headers=headers, timeout=120)
+            response = requests.post(url, json=payload, headers=headers, timeout=180)
             if response.status_code != 200:
                  raise Exception(f"Anthropic API Error {response.status_code}: {response.text}")
             
@@ -117,10 +132,10 @@ def get_llm_provider(provider_type: str, api_key: str, base_url: str) -> LLMProv
     if p_type == 'anthropic':
         # Default Anthropic URL if not provided
         url = base_url if base_url else "https://api.anthropic.com/v1"
-        return AnthropicProvider(api_key, url)
+        return AnthropicProvider(api_key, url, p_type)
     
     # Default to OpenAI Compatible (Works for OpenAI, DeepSeek, OpenRouter, AI Builders)
     # If base_url is missing, default to OpenAI? Or AI Builders?
     # Let's default to AI Builders since that's the current default
     url = base_url if base_url else "https://space.ai-builders.com/backend/v1"
-    return OpenAICompatibleProvider(api_key, url)
+    return OpenAICompatibleProvider(api_key, url, p_type)

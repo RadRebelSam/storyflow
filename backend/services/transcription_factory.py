@@ -7,7 +7,7 @@ from youtube_transcript_api.formatters import JSONFormatter
 import yt_dlp
 
 class TranscriptionProvider:
-    def fetch(self, url: str) -> Dict:
+    def fetch(self, url: str, language: str = None) -> Dict:
         raise NotImplementedError("Subclasses must implement fetch")
 
     def _get_video_id(self, url: str) -> str:
@@ -51,7 +51,7 @@ class YouTubeCaptionsProvider(TranscriptionProvider):
     Default free provider using community captions or auto-generated captions.
     Fast, free, but NO speaker labels (Diarization).
     """
-    def fetch(self, url: str) -> Dict:
+    def fetch(self, url: str, language: str = None) -> Dict:
         # Captions usually don't need ffmpeg unless burning/converting, 
         # but yt-dlp might use it for merging. Safe to ensure.
         self._ensure_ffmpeg() 
@@ -77,7 +77,7 @@ class YouTubeCaptionsProvider(TranscriptionProvider):
                 'skip_download': True,
                 'writeautomaticsub': True,
                 'writesubtitles': True,
-                'subtitleslangs': ['en'],
+                'subtitleslangs': [language] if language and language != 'auto' else ['en', 'es', 'fr', 'de', 'it', 'pt', 'ru', 'ja', 'zh-Hans', 'auto'],
                 'outtmpl': base_filename,
                 'quiet': True,
                 'no_warnings': True
@@ -206,7 +206,7 @@ class DeepgramProvider(TranscriptionProvider):
     def __init__(self, api_key: str):
         self.api_key = api_key
 
-    def fetch(self, url: str) -> Dict:
+    def fetch(self, url: str, language: str = None) -> Dict:
         # 0. Ensure FFmpeg is available
         self._ensure_ffmpeg()
             
@@ -259,7 +259,8 @@ class DeepgramProvider(TranscriptionProvider):
                     model="nova-2",
                     smart_format=True,
                     diarize=True,
-                    punctuate=True
+                    punctuate=True,
+                    language=language if language and language != 'auto' else None
                 )
                 
             # 3. Parse Response
@@ -380,7 +381,7 @@ class BaseWhisperProvider(TranscriptionProvider):
         except:
             return 0.0
 
-    def fetch(self, url: str) -> Dict:
+    def fetch(self, url: str, language: str = None) -> Dict:
         self._ensure_ffmpeg()
         video_id = self._get_video_id(url)
         print(f"{self.__class__.__name__}: extracting audio for {video_id}...")
@@ -456,7 +457,8 @@ class BaseWhisperProvider(TranscriptionProvider):
                             transcript = client.audio.transcriptions.create(
                                 model=self._get_model_name(), 
                                 file=audio_file, 
-                                response_format="verbose_json"
+                                response_format="verbose_json",
+                                language=language if language and language != 'auto' else None
                             )
                         break
                     except Exception as e:
@@ -524,54 +526,76 @@ class UniscribeProvider(TranscriptionProvider):
     BASE_URL = "https://api.uniscribe.co/api/v1"
 
     def __init__(self, api_key: str):
-        self.api_key = api_key
+        self.api_key = api_key.strip() # Ensure no whitespace
         self.headers = {"X-API-Key": self.api_key}
 
-    def fetch(self, url: str) -> Dict:
+    def fetch(self, url: str, language: str = None) -> Dict:
         video_id = self._get_video_id(url)
         
         # Check if it's a YouTube URL
         if "youtube.com" in url or "youtu.be" in url:
             print(f"Uniscribe: Using YouTube endpoint for {video_id}...")
-            return self._transcribe_youtube(url, video_id)
+            return self._transcribe_youtube(url, video_id, language)
         
         # Fallback to file download & upload
         print(f"Uniscribe: Downloading generic URL for {video_id}...")
         self._ensure_ffmpeg()
-        return self._transcribe_file(url, video_id)
+        return self._transcribe_file(url, video_id, language)
 
-    def _transcribe_youtube(self, url: str, video_id: str) -> Dict:
+    def _transcribe_youtube(self, url: str, video_id: str, language: str = None) -> Dict:
         import requests
         import time
         
         # 1. Start Job
         try:
-            resp = requests.post(
-                f"{self.BASE_URL}/transcriptions/youtube",
-                headers=self.headers,
-                json={
+            # Helper to run request with configurable language
+            def start_youtube_task(lang_code):
+                payload = {
                     "url": url,
-                    "language_code": "en",
                     "transcription_type": "transcript",
-                    "enable_speaker_diarization": True 
+                    "enable_speaker_diarization": True
                 }
-            )
-            resp.raise_for_status()
-            data = resp.json()
-            if not data.get("success"):
-                raise Exception(f"Uniscribe API Error: {data.get('message')}")
+                if lang_code:
+                    payload["language_code"] = lang_code
+                
+                r = requests.post(
+                    f"{self.BASE_URL}/transcriptions/youtube",
+                    headers=self.headers,
+                    json=payload
+                )
+                r.raise_for_status()
+                d = r.json()
+                if not d.get("success"):
+                     raise Exception(f"Uniscribe API Error: {d.get('message')}")
+                return d["data"]["id"]
+
+            task_id = None
+            try:
+                # Use provided language or default to auto
+                target_lang = language if language and language != 'auto' else 'auto'
+                print(f"Uniscribe: Starting task with language='{target_lang}'...")
+                task_id = start_youtube_task(target_lang)
+                
+            except requests.exceptions.HTTPError as e:
+                # If 400/403 and we tried something other than 'en', fallback to 'en'
+                if e.response.status_code in [400, 403]:
+                    print(f"Uniscribe: Language '{target_lang}' failed ({e.response.status_code}). Fallback to English ('en').")
+                    task_id = start_youtube_task("en")
+                else:
+                    raise e
             
-            task_id = data["data"]["id"]
             print(f"Uniscribe Task Started: {task_id}")
             
             return self._poll_and_parse(task_id, video_id)
             
         except requests.exceptions.HTTPError as e:
-            if e.response.status_code == 401 or e.response.status_code == 403:
-                 raise Exception("Uniscribe Invalid API Key or Unauthorized.")
+            if e.response.status_code == 401:
+                 raise Exception("Uniscribe Invalid API Key (401). Please check your key.")
+            if e.response.status_code == 403:
+                 raise Exception("Uniscribe Forbidden (403). Possible reasons: 1) Invalid Key, 2) Quota Exceeded, 3) 'Auto-Detect' not supported on this plan.")
             raise e
 
-    def _transcribe_file(self, url: str, video_id: str) -> Dict:
+    def _transcribe_file(self, url: str, video_id: str, language: str = None) -> Dict:
         import requests
         import time
         import uuid
@@ -625,18 +649,43 @@ class UniscribeProvider(TranscriptionProvider):
             
             # 4. Start Transcription
             print("Starting transcription task...")
-            resp = requests.post(
-                f"{self.BASE_URL}/transcriptions",
-                headers=self.headers,
-                json={
-                    "file_key": file_key,
-                    "language_code": "en",
-                    "enable_speaker_diarization": True
-                }
-            )
-            resp.raise_for_status()
-            task_id = resp.json()["data"]["id"]
             
+            # Retry logic for language code
+            task_id = None
+            try:
+                # Attempt 1: Provided language or Auto
+                target_lang = language if language and language != 'auto' else 'auto'
+                print(f"Uniscribe: Attempting language='{target_lang}'...")
+                
+                resp = requests.post(
+                    f"{self.BASE_URL}/transcriptions",
+                    headers=self.headers,
+                    json={
+                        "file_key": file_key,
+                        "language_code": target_lang, 
+                        "enable_speaker_diarization": True
+                    }
+                )
+                resp.raise_for_status()
+                task_id = resp.json()["data"]["id"]
+            except requests.exceptions.HTTPError as e:
+                # If 400/403, Fallback to 'en'
+                if e.response.status_code in [400, 403]:
+                    print(f"Uniscribe: Language '{target_lang}' failed ({e.response.status_code}). Fallback to English ('en').")
+                    resp = requests.post(
+                        f"{self.BASE_URL}/transcriptions",
+                        headers=self.headers,
+                        json={
+                            "file_key": file_key,
+                            "language_code": "en",
+                            "enable_speaker_diarization": True
+                        }
+                    )
+                    resp.raise_for_status()
+                    task_id = resp.json()["data"]["id"]
+                else:
+                    raise e
+
             # Cleanup local file early
             os.remove(audio_path)
             

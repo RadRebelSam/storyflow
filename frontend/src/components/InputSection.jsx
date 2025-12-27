@@ -97,13 +97,15 @@ const InputSection = ({ onAnalyze, loading, progress }) => {
       providerConfig = {
         provider: parsed.provider,
         api_key: parsed.apiKey,
-        base_url: parsed.baseUrl
+        base_url: parsed.baseUrl,
+        output_language: parsed.outputLanguage // Pass output language
       };
       transcriptionConfig = {
         transcription_provider: parsed.transcriptionProvider,
         deepgram_key: parsed.deepgramKey,
         openai_api_key: parsed.whisperKey || (parsed.provider === 'openai' ? parsed.apiKey : null),
-        uniscribe_key: parsed.uniscribeKey
+        uniscribe_key: parsed.uniscribeKey,
+        input_language: parsed.inputLanguage // Pass input language
       };
     }
 

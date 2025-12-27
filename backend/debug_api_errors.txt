@@ -1,0 +1,21 @@
+
+--- API Error 2025-12-26 13:07:10.349451 ---
+URL: https://space.ai-builders.com/backend/v1/chat/completions
+Model: deepseek
+Status: 500
+Response: Internal Server Error
+--------------------------
+
+--- API Error 2025-12-26 13:08:36.312402 ---
+URL: https://space.ai-builders.com/backend/v1/chat/completions
+Model: deepseek-chat
+Status: 400
+Response: {"detail":"Unsupported model 'deepseek-chat'"}
+--------------------------
+
+--- API Error 2025-12-26 13:09:55.949614 ---
+URL: https://space.ai-builders.com/backend/v1/chat/completions
+Model: deepseek
+Status: 500
+Response: Internal Server Error
+--------------------------
